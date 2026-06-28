@@ -41,8 +41,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useTheme } from "next-themes";
-import { useRouter } from "next/navigation";
-import { DashboardSection } from "@/components/sections/dashboard-section";
 import { useToast } from "@/hooks/use-toast";
 import { WorkModeSelector } from "@/components/work-mode-selector";
 import { GlobalSearch } from "@/components/global-search";
@@ -62,7 +60,7 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { toast } = useToast();
-  const router = useRouter();
+  // router removed - not used
 
   const activeDef = useMemo(
     () => SECTIONS.find((s) => s.id === activeSection),
@@ -383,7 +381,7 @@ function Footer() {
 function renderSection(section: string) {
   switch (section) {
     case "dashboard":
-      return <DashboardSection />;
+      return <DashboardSectionLazy />;
     case "cases":
       return <CasesSectionLazy />;
     case "clients":
@@ -427,33 +425,34 @@ function renderSection(section: string) {
     case "research":
       return <ResearchSectionLazy />;
     default:
-      return <DashboardSection />;
+      return <DashboardSectionLazy />;
   }
 }
 
-// Lazy imports للأقسام
+// Lazy imports للأقسام - مع ssr: false لتقليل استهلاك الذاكرة على الخادم
 import dynamic from "next/dynamic";
-const CasesSectionLazy = dynamic(() => import("@/components/sections/cases-section").then(m => ({ default: m.CasesSection })), { loading: () => <SectionSkeleton /> });
-const ClientsSectionLazy = dynamic(() => import("@/components/sections/clients-section").then(m => ({ default: m.ClientsSection })), { loading: () => <SectionSkeleton /> });
-const DocumentsSectionLazy = dynamic(() => import("@/components/sections/documents-section").then(m => ({ default: m.DocumentsSection })), { loading: () => <SectionSkeleton /> });
-const TasksSectionLazy = dynamic(() => import("@/components/sections/tasks-section").then(m => ({ default: m.TasksSection })), { loading: () => <SectionSkeleton /> });
-const AppointmentsSectionLazy = dynamic(() => import("@/components/sections/appointments-section").then(m => ({ default: m.AppointmentsSection })), { loading: () => <SectionSkeleton /> });
-const FinanceSectionLazy = dynamic(() => import("@/components/sections/finance-section").then(m => ({ default: m.FinanceSection })), { loading: () => <SectionSkeleton /> });
-const ReportsSectionLazy = dynamic(() => import("@/components/sections/reports-section").then(m => ({ default: m.ReportsSection })), { loading: () => <SectionSkeleton /> });
-const MemoEditorSectionLazy = dynamic(() => import("@/components/sections/memo-editor-section").then(m => ({ default: m.MemoEditorSection })), { loading: () => <SectionSkeleton /> });
-const CalculatorsSectionLazy = dynamic(() => import("@/components/sections/calculators-section").then(m => ({ default: m.CalculatorsSection })), { loading: () => <SectionSkeleton /> });
-const PleadingSectionLazy = dynamic(() => import("@/components/sections/pleading-section").then(m => ({ default: m.PleadingSection })), { loading: () => <SectionSkeleton /> });
-const MapsSectionLazy = dynamic(() => import("@/components/sections/maps-section").then(m => ({ default: m.MapsSection })), { loading: () => <SectionSkeleton /> });
-const AiThinkerSectionLazy = dynamic(() => import("@/components/sections/ai-thinker-section").then(m => ({ default: m.AiThinkerSection })), { loading: () => <SectionSkeleton /> });
-const TextAnalyzerSectionLazy = dynamic(() => import("@/components/sections/text-analyzer-section").then(m => ({ default: m.TextAnalyzerSection })), { loading: () => <SectionSkeleton /> });
-const PerformanceSectionLazy = dynamic(() => import("@/components/sections/performance-section").then(m => ({ default: m.PerformanceSection })), { loading: () => <SectionSkeleton /> });
-const DevelopmentSectionLazy = dynamic(() => import("@/components/sections/development-section").then(m => ({ default: m.DevelopmentSection })), { loading: () => <SectionSkeleton /> });
-const SettingsSectionLazy = dynamic(() => import("@/components/sections/settings-section").then(m => ({ default: m.SettingsSection })), { loading: () => <SectionSkeleton /> });
-const BackupSectionLazy = dynamic(() => import("@/components/sections/backup-section").then(m => ({ default: m.BackupSection })), { loading: () => <SectionSkeleton /> });
-const SecuritySectionLazy = dynamic(() => import("@/components/sections/security-section").then(m => ({ default: m.SecuritySection })), { loading: () => <SectionSkeleton /> });
-const UpdatesSectionLazy = dynamic(() => import("@/components/sections/updates-section").then(m => ({ default: m.UpdatesSection })), { loading: () => <SectionSkeleton /> });
-const TeamSectionLazy = dynamic(() => import("@/components/sections/team-section").then(m => ({ default: m.TeamSection })), { loading: () => <SectionSkeleton /> });
-const ResearchSectionLazy = dynamic(() => import("@/components/sections/research-section").then(m => ({ default: m.ResearchSection })), { loading: () => <SectionSkeleton /> });
+const DashboardSectionLazy = dynamic(() => import("@/components/sections/dashboard-section").then(m => ({ default: m.DashboardSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const CasesSectionLazy = dynamic(() => import("@/components/sections/cases-section").then(m => ({ default: m.CasesSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const ClientsSectionLazy = dynamic(() => import("@/components/sections/clients-section").then(m => ({ default: m.ClientsSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const DocumentsSectionLazy = dynamic(() => import("@/components/sections/documents-section").then(m => ({ default: m.DocumentsSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const TasksSectionLazy = dynamic(() => import("@/components/sections/tasks-section").then(m => ({ default: m.TasksSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const AppointmentsSectionLazy = dynamic(() => import("@/components/sections/appointments-section").then(m => ({ default: m.AppointmentsSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const FinanceSectionLazy = dynamic(() => import("@/components/sections/finance-section").then(m => ({ default: m.FinanceSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const ReportsSectionLazy = dynamic(() => import("@/components/sections/reports-section").then(m => ({ default: m.ReportsSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const MemoEditorSectionLazy = dynamic(() => import("@/components/sections/memo-editor-section").then(m => ({ default: m.MemoEditorSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const CalculatorsSectionLazy = dynamic(() => import("@/components/sections/calculators-section").then(m => ({ default: m.CalculatorsSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const PleadingSectionLazy = dynamic(() => import("@/components/sections/pleading-section").then(m => ({ default: m.PleadingSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const MapsSectionLazy = dynamic(() => import("@/components/sections/maps-section").then(m => ({ default: m.MapsSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const AiThinkerSectionLazy = dynamic(() => import("@/components/sections/ai-thinker-section").then(m => ({ default: m.AiThinkerSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const TextAnalyzerSectionLazy = dynamic(() => import("@/components/sections/text-analyzer-section").then(m => ({ default: m.TextAnalyzerSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const PerformanceSectionLazy = dynamic(() => import("@/components/sections/performance-section").then(m => ({ default: m.PerformanceSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const DevelopmentSectionLazy = dynamic(() => import("@/components/sections/development-section").then(m => ({ default: m.DevelopmentSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const SettingsSectionLazy = dynamic(() => import("@/components/sections/settings-section").then(m => ({ default: m.SettingsSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const BackupSectionLazy = dynamic(() => import("@/components/sections/backup-section").then(m => ({ default: m.BackupSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const SecuritySectionLazy = dynamic(() => import("@/components/sections/security-section").then(m => ({ default: m.SecuritySection })), { loading: () => <SectionSkeleton />, ssr: false });
+const UpdatesSectionLazy = dynamic(() => import("@/components/sections/updates-section").then(m => ({ default: m.UpdatesSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const TeamSectionLazy = dynamic(() => import("@/components/sections/team-section").then(m => ({ default: m.TeamSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const ResearchSectionLazy = dynamic(() => import("@/components/sections/research-section").then(m => ({ default: m.ResearchSection })), { loading: () => <SectionSkeleton />, ssr: false });
 
 function SectionSkeleton() {
   return (
