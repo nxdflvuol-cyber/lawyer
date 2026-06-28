@@ -93,6 +93,8 @@ model Client {
   documents       Document[]
   communications  Communication[]
   payments        Payment[]
+  expenses        Expense[]
+  invoices        Invoice[]
   powers          PowerOfAttorney[]
   tasks           Task[]
   appointments    Appointment[]
@@ -170,6 +172,8 @@ model Case {
   appointments      Appointment[]
   fees              Fee[]
   expenses          Expense[]
+  payments          Payment[]
+  invoices          Invoice[]
   evidences         Evidence[]
   adjournments      String?
 }
@@ -342,6 +346,7 @@ model Payment {
   clientId    String
   client      Client   @relation(fields: [clientId], references: [id])
   caseId      String?
+  case        Case?    @relation(fields: [caseId], references: [id])
   feeId       String?
   amount      Float
   paymentDate DateTime @default(now())
@@ -359,6 +364,7 @@ model Expense {
   caseId      String?
   case        Case?    @relation(fields: [caseId], references: [id])
   clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id])
   category    String   // court_fees | travel | documents | experts | other
   amount      Float
   expenseDate DateTime @default(now())
@@ -371,7 +377,9 @@ model Invoice {
   id            String   @id @default(cuid())
   invoiceNumber String   @unique
   clientId      String?
+  client        Client?  @relation(fields: [clientId], references: [id])
   caseId        String?
+  case          Case?    @relation(fields: [caseId], references: [id])
   issueDate     DateTime @default(now())
   dueDate       DateTime?
   items         String   // JSON
