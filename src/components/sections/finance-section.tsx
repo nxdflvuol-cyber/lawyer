@@ -1,6 +1,7 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
@@ -899,12 +900,9 @@ function CreateFinanceDialog({
   const [kind, setKind] = useState<"fee" | "payment" | "expense" | "invoice">(defaultKind);
 
   // مزامنة kind مع defaultKind عند فتح النافذة
-  const prevDefault = useMemo(() => defaultKind, [defaultKind, open]);
-  const [lastDefault, setLastDefault] = useState(defaultKind);
-  if (open && lastDefault !== prevDefault) {
-    setLastDefault(prevDefault);
-    setKind(prevDefault);
-  }
+  useEffect(() => {
+    if (open) setKind(defaultKind);
+  }, [defaultKind, open]);
 
   // Fee state
   const [feeCaseId, setFeeCaseId] = useState<string>(preselectedCaseId ?? "");

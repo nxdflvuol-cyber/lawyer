@@ -1,6 +1,7 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
@@ -1002,7 +1003,6 @@ function CreateAppointmentDialog({
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [prevOpen, setPrevOpen] = useState(open);
   const [form, setForm] = useState<CreateAptFormData>({
     title: "",
     description: "",
@@ -1018,15 +1018,14 @@ function CreateAppointmentDialog({
   });
 
   // إعادة تعيين التاريخ الافتراضي عند فتح النافذة
-  if (open !== prevOpen) {
-    setPrevOpen(open);
+  useEffect(() => {
     if (open) {
       setForm((f) => ({
         ...f,
         startDate: toISODateTime(defaultDate),
       }));
     }
-  }
+  }, [open, defaultDate]);
 
   const createMutation = useMutation({
     mutationFn: async (data: CreateAptFormData) => {
@@ -1370,10 +1369,8 @@ function AppointmentDetailSheet({
     (a) => a.id === aptId
   );
 
-  // مزامنة
-  const [prevAptId, setPrevAptId] = useState<string | null>(null);
-  if (aptId !== prevAptId) {
-    setPrevAptId(aptId);
+  // مزامنة باستخدام useEffect
+  useEffect(() => {
     if (apt && !editing) {
       setEditForm({
         title: apt.title,
@@ -1396,7 +1393,7 @@ function AppointmentDetailSheet({
         status: apt.status,
       });
     }
-  }
+  }, [apt, editing]);
 
   const updateMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {

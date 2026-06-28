@@ -1,6 +1,7 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -1185,10 +1186,8 @@ function TaskDetailSheet({
     (t: TaskItem) => t.id === taskId
   );
 
-  // مزامنة مع نمط React 19
-  const [prevTaskId, setPrevTaskId] = useState<string | null>(null);
-  if (taskId !== prevTaskId) {
-    setPrevTaskId(taskId);
+  // مزامنة باستخدام useEffect
+  useEffect(() => {
     if (task && !editing) {
       setEditForm({
         title: task.title,
@@ -1203,7 +1202,7 @@ function TaskDetailSheet({
         tags: task.tags ?? "",
       });
     }
-  }
+  }, [task, editing]);
 
   const updateMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {

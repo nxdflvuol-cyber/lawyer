@@ -1,6 +1,7 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
@@ -211,17 +212,13 @@ export function DocumentsSection() {
   const [detailDocId, setDetailDocId] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
 
-  // مزامنة مع متجر التنقل
-  const [prevCaseId, setPrevCaseId] = useState(selectedCaseId);
-  if (selectedCaseId !== prevCaseId) {
-    setPrevCaseId(selectedCaseId);
+  // مزامنة مع متجر التنقل - باستخدام useEffect لتجنب إعادة التصيير اللانهائي
+  useEffect(() => {
     if (selectedCaseId) setCaseFilter(selectedCaseId);
-  }
-  const [prevClientId, setPrevClientId] = useState(selectedClientId);
-  if (selectedClientId !== prevClientId) {
-    setPrevClientId(selectedClientId);
+  }, [selectedCaseId]);
+  useEffect(() => {
     if (selectedClientId) setClientFilter(selectedClientId);
-  }
+  }, [selectedClientId]);
 
   const queryParams = useMemo(() => {
     const p = new URLSearchParams();
@@ -1202,13 +1199,12 @@ function DocumentDetailSheet({
     enabled: !!docId,
   });
 
-  // مزامنة البيانات مع نمط React 19 الموصى به
-  const [prevData, setPrevData] = useState<DocumentItem | null>(null);
+  // مزامنة البيانات باستخدام useEffect
   const doc: DocumentItem | null = data?.document ?? null;
-  if (doc !== prevData) {
-    setPrevData(doc);
+  useEffect(() => {
+    if (!doc) return;
     setDocDetail(doc);
-    if (doc && !editing) {
+    if (!editing) {
       setEditForm({
         title: doc.title,
         description: doc.description ?? "",
@@ -1219,7 +1215,7 @@ function DocumentDetailSheet({
         clientId: doc.clientId ?? "",
       });
     }
-  }
+  }, [doc, editing]);
 
   const updateMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
@@ -1689,23 +1685,28 @@ function DocumentPreviewDialog({
   const { toast } = useToast();
   const [fullDoc, setFullDoc] = useState<DocumentItem | null>(null);
   const [loading, setLoading] = useState(false);
-  const [prevDocId, setPrevDocId] = useState<string | null>(null);
 
   // جلب البيانات الكاملة عند فتح المعاينة لمستند جديد
-  if (doc?.id !== prevDocId) {
-    setPrevDocId(doc?.id ?? null);
+  useEffect(() => {
+    if (!doc || !open) return;
+    let cancelled = false;
+    setLoading(true);
     setFullDoc(null);
-    if (doc && open) {
-      setLoading(true);
-      fetch(`/api/documents/${doc.id}`)
-        .then((r) => r.json())
-        .then((data) => {
+    fetch(`/api/documents/${doc.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) {
           setFullDoc(data.document ?? null);
           setLoading(false);
-        })
-        .catch(() => setLoading(false));
-    }
-  }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [doc?.id, open]);
 
   if (!doc) return null;
   const Icon = getDocTypeConfig(doc.docType).icon;

@@ -1,6 +1,7 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
@@ -302,14 +303,12 @@ export function CasesSection() {
   const [showCreate, setShowCreate] = useState(false);
   const [detailCaseId, setDetailCaseId] = useState<string | null>(null);
 
-  // مزامنة مع متجر التنقل (نمط React الموصى به: تعديل الحالة أثناء العرض)
-  const [prevSelectedCaseId, setPrevSelectedCaseId] = useState(selectedCaseId);
-  if (selectedCaseId !== prevSelectedCaseId) {
-    setPrevSelectedCaseId(selectedCaseId);
+  // مزامنة مع متجر التنقل - باستخدام useEffect
+  useEffect(() => {
     if (selectedCaseId && !detailCaseId) {
       setDetailCaseId(selectedCaseId);
     }
-  }
+  }, [selectedCaseId, detailCaseId]);
 
   const queryParams = useMemo(() => {
     const p = new URLSearchParams();

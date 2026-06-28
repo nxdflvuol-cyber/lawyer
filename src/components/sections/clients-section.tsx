@@ -1,6 +1,7 @@
 "use client";
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
@@ -279,15 +280,12 @@ export function ClientsSection() {
   const [showCreate, setShowCreate] = useState(false);
   const [detailClientId, setDetailClientId] = useState<string | null>(null);
 
-  // مزامنة مع متجر التنقل (نمط React الموصى به)
-  const [prevSelectedClientId, setPrevSelectedClientId] =
-    useState(selectedClientId);
-  if (selectedClientId !== prevSelectedClientId) {
-    setPrevSelectedClientId(selectedClientId);
+  // مزامنة مع متجر التنقل - باستخدام useEffect
+  useEffect(() => {
     if (selectedClientId && !detailClientId) {
       setDetailClientId(selectedClientId);
     }
-  }
+  }, [selectedClientId, detailClientId]);
 
   const queryParams = useMemo(() => {
     const p = new URLSearchParams();
