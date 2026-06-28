@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useSettingsStore, useAuthStore, useNavStore } from "@/lib/stores";
 import {
   Settings as SettingsIcon,
@@ -24,6 +25,12 @@ import {
   Eye,
   Languages,
   Clock,
+  Brain,
+  Wifi,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  Server,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
@@ -73,12 +80,16 @@ export function SettingsSection() {
       </div>
 
       <Tabs defaultValue="general">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6">
           <TabsTrigger value="general">عام</TabsTrigger>
           <TabsTrigger value="appearance">المظهر</TabsTrigger>
           <TabsTrigger value="security">الأمان</TabsTrigger>
           <TabsTrigger value="notifications">التنبيهات</TabsTrigger>
-          <TabsTrigger value="modes">أوضاع العمل</TabsTrigger>
+          <TabsTrigger value="modes">أوضاع</TabsTrigger>
+          <TabsTrigger value="ai" className="flex items-center gap-1">
+            <Brain className="w-3.5 h-3.5" />
+            الذكاء AI
+          </TabsTrigger>
         </TabsList>
 
         {/* عام */}
@@ -355,7 +366,225 @@ export function SettingsSection() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* الذكاء الاصطناعي */}
+        <TabsContent value="ai" className="space-y-4">
+          <AiProviderCard />
+        </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// ============================================================
+// بطاقة إعدادات مزود الذكاء الاصطناعي
+// ============================================================
+function AiProviderCard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [model, setModel] = useState("");
+  const [hasKey, setHasKey] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  // جلب الإعدادات الحالية
+  const { refetch } = useQuery({
+    queryKey: ["ai-provider"],
+    queryFn: async () => {
+      const res = await fetch("/api/ai/provider");
+      const data = await res.json();
+      if (data.success) {
+        setBaseUrl(data.config.baseUrl);
+        setModel(data.config.model);
+        setHasKey(data.config.hasKey);
+      }
+      return data;
+    },
+  });
+
+  // تعيين القيم الافتراضية بعد التحميل
+  if (!loaded && baseUrl === "" && model === "") {
+    setLoaded(true);
+    refetch();
+  }
+
+  async function saveSettings() {
+    try {
+      const updates: { baseUrl?: string; apiKey?: string; model?: string } = {};
+      if (baseUrl) updates.baseUrl = baseUrl;
+      if (apiKey) updates.apiKey = apiKey;
+      if (model) updates.model = model;
+
+      const res = await fetch("/api/ai/provider", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast({ title: "تم الحفظ", description: "تم حفظ إعدادات مزود الذكاء الاصطناعي" });
+        setApiKey("");
+        refetch();
+        queryClient.invalidateQueries({ queryKey: ["ai-provider"] });
+      } else {
+        toast({ title: "خطأ", description: data.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "خطأ في الحفظ", variant: "destructive" });
+    }
+  }
+
+  async function testConnection() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/ai/provider", { method: "PUT" });
+      const data = await res.json();
+      setTestResult({ success: data.success, message: data.message ?? (data.success ? "نجح الاتصال" : "فشل الاتصال") });
+      toast({
+        title: data.success ? "نجح الاتصال" : "فشل الاتصال",
+        description: data.message,
+        variant: data.success ? "default" : "destructive",
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "خطأ غير معروف";
+      setTestResult({ success: false, message: msg });
+      toast({ title: "فشل الاتصال", description: msg, variant: "destructive" });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Brain className="w-5 h-5 text-primary" />
+          مزود الذكاء الاصطناعي
+        </CardTitle>
+        <CardDescription>
+          إعدادات مزود الذكاء الاصطناعي للمفكر القانوني ومحلل النصوص ومساعد المرافعة وتوليد المستندات
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* حالة الاتصال */}
+        <div className={`flex items-center gap-3 p-3 rounded-lg border ${testResult?.success ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800" : testResult ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800" : "bg-muted/50 border-border"}`}>
+          {testing ? (
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+          ) : testResult?.success ? (
+            <CheckCircle className="w-5 h-5 text-emerald-600" />
+          ) : testResult ? (
+            <XCircle className="w-5 h-5 text-red-600" />
+          ) : (
+            <Wifi className="w-5 h-5 text-muted-foreground" />
+          )}
+          <div className="flex-1">
+            <p className="text-sm font-medium">
+              {testing ? "جارٍ اختبار الاتصال..." : testResult ? (testResult.success ? "متصل" : "غير متصل") : "لم يتم اختبار الاتصال بعد"}
+            </p>
+            {testResult && (
+              <p className={`text-xs ${testResult.success ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
+                {testResult.message}
+              </p>
+            )}
+          </div>
+          {hasKey && (
+            <Badge variant="outline" className="text-xs">
+              مفتاح مُعد
+            </Badge>
+          )}
+        </div>
+
+        {/* عنوان الـ API */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <Server className="w-4 h-4 text-muted-foreground" />
+            عنوان الـ API (Base URL)
+          </Label>
+          <Input
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://api.freemodel.dev/v1"
+            dir="ltr"
+            className="text-left"
+          />
+          <p className="text-xs text-muted-foreground">
+            عنوان المزود المتوافق مع OpenAI API
+          </p>
+        </div>
+
+        {/* مفتاح API */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-muted-foreground" />
+            مفتاح API {hasKey && <span className="text-xs text-emerald-600">(موجود - اكتب جديداً للتغيير)</span>}
+          </Label>
+          <Input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={hasKey ? "••••••••••••••••" : "fe_oa_xxxxx..."}
+            dir="ltr"
+            className="text-left"
+          />
+          <p className="text-xs text-muted-foreground">
+            المفتاح مشفر ومخزن بأمان. لن يتم عرضه مرة أخرى بعد الحفظ.
+          </p>
+        </div>
+
+        {/* اسم النموذج */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <Brain className="w-4 h-4 text-muted-foreground" />
+            اسم النموذج (Model)
+          </Label>
+          <Input
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="gpt-5.5"
+            dir="ltr"
+            className="text-left"
+          />
+          <p className="text-xs text-muted-foreground">
+            اسم النموذج لدى المزود
+          </p>
+        </div>
+
+        {/* الأزرار */}
+        <div className="flex gap-2 pt-2">
+          <Button onClick={saveSettings} className="flex-1">
+            <Save className="w-4 h-4 ml-2" />
+            حفظ الإعدادات
+          </Button>
+          <Button onClick={testConnection} variant="outline" disabled={testing}>
+            {testing ? (
+              <>
+                <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                جارٍ الاختبار...
+              </>
+            ) : (
+              <>
+                <Wifi className="w-4 h-4 ml-2" />
+                اختبار الاتصال
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* معلومات */}
+        <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-400">
+          <p className="font-medium mb-1">معلومات عن المزود:</p>
+          <ul className="space-y-1 list-disc pr-4">
+            <li>المزود الحالي يدعم أي API متوافق مع OpenAI</li>
+            <li>يُستخدم في: المفكر القانوني، محلل النصوص، مساعد المرافعة، توليد المستندات</li>
+            <li>باقي أقسام النظام تعمل محلياً 100% بدون إنترنت</li>
+            <li>البيانات تُرسل فقط للمزود عند استخدام ميزات الذكاء الاصطناعي</li>
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

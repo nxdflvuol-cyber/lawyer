@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import ZAI from "z-ai-web-dev-sdk";
+import { callAiModel, PLEADING_SYSTEM_PROMPT, type ChatMessage } from "@/lib/ai-client";
 
 // مساعد المرافعة - توليد نقاط المرافعة والردود السريعة
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { caseFacts, opponentDefenses, judgeTendencies, requestType } = body;
-
-    const zai = await ZAI.create();
-
-    const systemPrompt = `أنت مساعد مرافعة قانونية خبير. تساعد المحامي في إعداد المرافعات وتقديم الردود السريعة في الجلسات. أجب بالعربية الفصحى بأسلوب مرافعة قانوني قوي ومقنع.`;
 
     let prompt = "";
 
@@ -70,19 +66,16 @@ ${caseFacts}
         prompt = caseFacts;
     }
 
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: "assistant", content: systemPrompt },
-        { role: "user", content: prompt },
-      ],
-      thinking: { type: "enabled" },
-    });
+    const messages: ChatMessage[] = [
+      { role: "system", content: PLEADING_SYSTEM_PROMPT },
+      { role: "user", content: prompt },
+    ];
 
-    const result = completion.choices[0]?.message?.content ?? "";
+    const result = await callAiModel(messages, { temperature: 0.7, thinking: true });
 
     return NextResponse.json({
       success: true,
-      result,
+      result: result.content,
       type: requestType,
     });
   } catch (error) {

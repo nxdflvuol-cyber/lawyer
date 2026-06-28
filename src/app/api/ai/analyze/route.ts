@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import ZAI from "z-ai-web-dev-sdk";
+import { callAiModel, TEXT_ANALYZER_SYSTEM_PROMPT, type ChatMessage } from "@/lib/ai-client";
 
 // محلل النصوص القانونية - تحليل العقود والمذكرات وكشف الثغرات
 export async function POST(req: NextRequest) {
@@ -11,11 +11,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "النص مطلوب" }, { status: 400 });
     }
 
-    const zai = await ZAI.create();
-
     let prompt = "";
-    const systemPrompt =
-      "أنت محلل نصوص قانونية خبير. تحلل المستندات القانونية وتكشف عن الثغرات والمخاطر والتناقضات. أجب بالعربية الفصحى بهيكل واضح ومنظم.";
 
     switch (analysisType) {
       case "contract_risk":
@@ -101,19 +97,16 @@ ${text}
         prompt = `حلل المستند القانوني التالي وقدّم تقييماً شاملاً له مع التوصيات:\n\n${text}`;
     }
 
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: "assistant", content: systemPrompt },
-        { role: "user", content: prompt },
-      ],
-      thinking: { type: "enabled" },
-    });
+    const messages: ChatMessage[] = [
+      { role: "system", content: TEXT_ANALYZER_SYSTEM_PROMPT },
+      { role: "user", content: prompt },
+    ];
 
-    const analysis = completion.choices[0]?.message?.content ?? "";
+    const result = await callAiModel(messages, { temperature: 0.5, thinking: true });
 
     return NextResponse.json({
       success: true,
-      analysis,
+      analysis: result.content,
       type: analysisType,
     });
   } catch (error) {
