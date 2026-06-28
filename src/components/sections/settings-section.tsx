@@ -10,6 +10,14 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useSettingsStore, useAuthStore, useNavStore } from "@/lib/stores";
 import {
   Settings as SettingsIcon,
@@ -31,9 +39,16 @@ import {
   XCircle,
   Loader2,
   Server,
+  UserCog,
+  Plus,
+  Trash2,
+  Edit3,
+  Power,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
+import { DEFAULT_PERMISSIONS, ROLE_LABELS, type UserRole, type AccessLevel } from "@/lib/permissions";
+import type { SectionId } from "@/lib/stores";
 
 export function SettingsSection() {
   const settings = useSettingsStore();
@@ -80,7 +95,7 @@ export function SettingsSection() {
       </div>
 
       <Tabs defaultValue="general">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-7">
           <TabsTrigger value="general">عام</TabsTrigger>
           <TabsTrigger value="appearance">المظهر</TabsTrigger>
           <TabsTrigger value="security">الأمان</TabsTrigger>
@@ -89,6 +104,10 @@ export function SettingsSection() {
           <TabsTrigger value="ai" className="flex items-center gap-1">
             <Brain className="w-3.5 h-3.5" />
             الذكاء AI
+          </TabsTrigger>
+          <TabsTrigger value="users" className="flex items-center gap-1">
+            <UserCog className="w-3.5 h-3.5" />
+            المستخدمون
           </TabsTrigger>
         </TabsList>
 
@@ -371,6 +390,11 @@ export function SettingsSection() {
         <TabsContent value="ai" className="space-y-4">
           <AiProviderCard />
         </TabsContent>
+
+        {/* المستخدمون والصلاحيات */}
+        <TabsContent value="users" className="space-y-4">
+          <UsersManagementCard />
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -584,6 +608,552 @@ function AiProviderCard() {
             <li>البيانات تُرسل فقط للمزود عند استخدام ميزات الذكاء الاصطناعي</li>
           </ul>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============================================================
+// بطاقة إدارة المستخدمين والصلاحيات
+// ============================================================
+function UsersManagementCard() {
+  const { toast } = useToast();
+  const user = useAuthStore((s) => s.user);
+  const updateUser = useAuthStore((s) => s.updateUser);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingUser, setEditingUser] = useState<string | null>(null);
+  const [showPermissions, setShowPermissions] = useState(false);
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => {
+      const res = await fetch("/api/users");
+      return res.json();
+    },
+    enabled: user?.role === "admin",
+  });
+
+  const [createForm, setCreateForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "member",
+    phone: "",
+    pin: "",
+  });
+
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    role: "member",
+    phone: "",
+    isActive: true,
+    password: "",
+    pin: "",
+  });
+
+  // التحقق من صلاحية الإدارة - بعد الـ hooks
+  if (user?.role !== "admin") {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <Shield className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+          <p className="font-medium">صلاحية مطلوبة</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            يجب أن تكون مديراً للوصول إلى إدارة المستخدمين
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const users: Array<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    phone?: string | null;
+    isActive: boolean;
+    lastLogin?: string | null;
+    createdAt: string;
+  }> = data?.users ?? [];
+
+  async function handleCreate() {
+    if (!createForm.name || !createForm.email || !createForm.password) {
+      toast({ title: "املأ جميع الحقول المطلوبة", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(createForm),
+      });
+      const result = await res.json();
+      if (result.success) {
+        toast({ title: "تم إنشاء المستخدم بنجاح" });
+        setShowCreate(false);
+        setCreateForm({ name: "", email: "", password: "", role: "member", phone: "", pin: "" });
+        refetch();
+      } else {
+        toast({ title: "خطأ", description: result.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "خطأ في الإنشاء", variant: "destructive" });
+    }
+  }
+
+  async function handleUpdate(id: string) {
+    const updates: Record<string, unknown> = {};
+    if (editForm.name) updates.name = editForm.name;
+    if (editForm.email) updates.email = editForm.email;
+    if (editForm.role) updates.role = editForm.role;
+    updates.phone = editForm.phone || null;
+    updates.isActive = editForm.isActive;
+    if (editForm.password) updates.password = editForm.password;
+    if (editForm.pin !== undefined) updates.pin = editForm.pin || null;
+
+    try {
+      const res = await fetch(`/api/users/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      const result = await res.json();
+      if (result.success) {
+        toast({ title: "تم تحديث المستخدم" });
+        setEditingUser(null);
+        refetch();
+        // إذا كان المستخدم المُحدّث هو المستخدم الحالي، حدّث المتجر
+        if (id === user?.id) {
+          updateUser({
+            name: result.user.name,
+            email: result.user.email,
+            role: result.user.role,
+          });
+        }
+      } else {
+        toast({ title: "خطأ", description: result.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "خطأ في التحديث", variant: "destructive" });
+    }
+  }
+
+  async function handleToggleActive(id: string, currentActive: boolean) {
+    try {
+      const res = await fetch(`/api/users/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !currentActive }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        toast({
+          title: !currentActive ? "تم تفعيل المستخدم" : "تم تعطيل المستخدم",
+        });
+        refetch();
+      }
+    } catch {
+      toast({ title: "خطأ", variant: "destructive" });
+    }
+  }
+
+  async function handleDelete(id: string, name: string) {
+    if (id === user?.id) {
+      toast({ title: "لا يمكنك حذف حسابك الحالي", variant: "destructive" });
+      return;
+    }
+    if (!confirm(`هل أنت متأكد من حذف المستخدم "${name}"؟`)) return;
+    try {
+      const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
+      const result = await res.json();
+      if (result.success) {
+        toast({ title: "تم حذف المستخدم" });
+        refetch();
+      } else {
+        toast({ title: "خطأ", description: result.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "خطأ في الحذف", variant: "destructive" });
+    }
+  }
+
+  function startEdit(u: typeof users[0]) {
+    setEditForm({
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      phone: u.phone ?? "",
+      isActive: u.isActive,
+      password: "",
+      pin: "",
+    });
+    setEditingUser(u.id);
+  }
+
+  const ROLE_COLORS: Record<string, string> = {
+    admin: "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400",
+    lawyer: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400",
+    assistant: "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400",
+    member: "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400",
+    intern: "bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400",
+  };
+
+  const ROLE_LABELS_LOCAL: Record<string, string> = {
+    admin: "مدير",
+    lawyer: "محامي",
+    assistant: "مساعد",
+    member: "عضو",
+    intern: "متدرب",
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* قائمة المستخدمين */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <UserCog className="w-5 h-5 text-primary" />
+              إدارة المستخدمين والصلاحيات
+            </CardTitle>
+            <CardDescription>
+              إضافة وتعديل المستخدمين وتحديد أدوارهم وصلاحياتهم
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowPermissions(!showPermissions)}>
+              <Eye className="w-4 h-4 ml-2" />
+              {showPermissions ? "إخفاء" : "عرض"} الصلاحيات
+            </Button>
+            <Button size="sm" onClick={() => setShowCreate(true)}>
+              <Plus className="w-4 h-4 ml-2" />
+              مستخدم جديد
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-16 bg-muted rounded-md animate-pulse" />
+              ))}
+            </div>
+          ) : users.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">لا يوجد مستخدمون</p>
+          ) : (
+            <div className="space-y-2">
+              {users.map((u) => (
+                <div
+                  key={u.id}
+                  className="group flex items-center gap-3 p-3 rounded-md border border-border hover:bg-accent/30"
+                >
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <User className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium truncate">{u.name}</p>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[u.role] ?? ""}`}>
+                        {ROLE_LABELS_LOCAL[u.role] ?? u.role}
+                      </span>
+                      {u.id === user?.id && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary text-primary-foreground">
+                          أنت
+                        </span>
+                      )}
+                      {!u.isActive && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                          معطّل
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                    {u.lastLogin && (
+                      <p className="text-[10px] text-muted-foreground">
+                        آخر دخول: {new Date(u.lastLogin).toLocaleDateString("ar-EG")}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      onClick={() => handleToggleActive(u.id, u.isActive)}
+                      title={u.isActive ? "تعطيل" : "تفعيل"}
+                    >
+                      <Power className={`w-4 h-4 ${u.isActive ? "text-emerald-600" : "text-red-600"}`} />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      onClick={() => startEdit(u)}
+                      title="تعديل"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </Button>
+                    {u.id !== user?.id && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-destructive"
+                        onClick={() => handleDelete(u.id, u.name)}
+                        title="حذف"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* جدول الصلاحيات حسب الدور */}
+      {showPermissions && <PermissionsMatrix />}
+
+      {/* نافذة إنشاء مستخدم جديد */}
+      {showCreate && (
+        <Dialog open={showCreate} onOpenChange={setShowCreate}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>إضافة مستخدم جديد</DialogTitle>
+              <DialogDescription>أنشئ حساباً جديداً وحدد دوره وصلاحياته</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>الاسم *</Label>
+                  <Input value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>البريد الإلكتروني *</Label>
+                  <Input type="email" dir="ltr" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>كلمة المرور *</Label>
+                  <Input type="password" dir="ltr" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>رمز PIN (اختياري)</Label>
+                  <Input type="password" inputMode="numeric" maxLength={6} dir="ltr" value={createForm.pin} onChange={(e) => setCreateForm({ ...createForm, pin: e.target.value.replace(/\D/g, "") })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>الهاتف</Label>
+                  <Input dir="ltr" value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>الدور</Label>
+                  <Select value={createForm.role} onValueChange={(v) => setCreateForm({ ...createForm, role: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">مدير (صلاحيات كاملة)</SelectItem>
+                      <SelectItem value="lawyer">محامي</SelectItem>
+                      <SelectItem value="assistant">مساعد قانوني</SelectItem>
+                      <SelectItem value="member">عضو</SelectItem>
+                      <SelectItem value="intern">متدرب</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="p-3 rounded-md bg-muted/50 text-xs">
+                <p className="font-medium mb-1">صلاحيات الدور المختار:</p>
+                <RolePermissionsSummary role={createForm.role} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowCreate(false)}>إلغاء</Button>
+              <Button onClick={handleCreate}>
+                <Plus className="w-4 h-4 ml-2" />
+                إنشاء المستخدم
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* نافذة تعديل مستخدم */}
+      {editingUser && (
+        <Dialog open={!!editingUser} onOpenChange={(o) => !o && setEditingUser(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>تعديل المستخدم</DialogTitle>
+              <DialogDescription>عدّل بيانات المستخدم وصلاحياته</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>الاسم</Label>
+                  <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>البريد الإلكتروني</Label>
+                  <Input type="email" dir="ltr" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>كلمة مرور جديدة (اتركها فارغة للإبقاء)</Label>
+                  <Input type="password" dir="ltr" value={editForm.password} onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>رمز PIN (اتركه فارغاً للإزالة)</Label>
+                  <Input type="password" inputMode="numeric" maxLength={6} dir="ltr" value={editForm.pin} onChange={(e) => setEditForm({ ...editForm, pin: e.target.value.replace(/\D/g, "") })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>الهاتف</Label>
+                  <Input dir="ltr" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>الدور</Label>
+                  <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">مدير (صلاحيات كاملة)</SelectItem>
+                      <SelectItem value="lawyer">محامي</SelectItem>
+                      <SelectItem value="assistant">مساعد قانوني</SelectItem>
+                      <SelectItem value="member">عضو</SelectItem>
+                      <SelectItem value="intern">متدرب</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-md bg-muted/50">
+                <Label>الحساب نشط</Label>
+                <Switch checked={editForm.isActive} onCheckedChange={(v) => setEditForm({ ...editForm, isActive: v })} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingUser(null)}>إلغاء</Button>
+              <Button onClick={() => handleUpdate(editingUser)}>
+                <Save className="w-4 h-4 ml-2" />
+                حفظ التغييرات
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// ملخص صلاحيات الدور
+// ============================================================
+function RolePermissionsSummary({ role }: { role: string }) {
+  const permissions = DEFAULT_PERMISSIONS[role as UserRole];
+  if (!permissions) return null;
+
+  const sections = [
+    { id: "dashboard", label: "الرئيسية" },
+    { id: "cases", label: "القضايا" },
+    { id: "clients", label: "الموكلين" },
+    { id: "documents", label: "المستندات" },
+    { id: "tasks", label: "المهام" },
+    { id: "appointments", label: "المواعيد" },
+    { id: "finance", label: "المالية" },
+    { id: "reports", label: "التقارير" },
+    { id: "ai-thinker", label: "المفكر القانوني" },
+    { id: "settings", label: "الإعدادات" },
+    { id: "team", label: "المستخدمون" },
+    { id: "security", label: "الأمان" },
+  ];
+
+  const allowed = sections.filter((s) => permissions[s.id as keyof typeof permissions] !== "none");
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {allowed.map((s) => (
+        <span key={s.id} className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
+          {s.label}
+        </span>
+      ))}
+      {allowed.length === 0 && <span className="text-red-600">لا صلاحيات</span>}
+    </div>
+  );
+}
+
+// ============================================================
+// جدول الصلاحيات الكامل
+// ============================================================
+function PermissionsMatrix() {
+  const roles: UserRole[] = ["admin", "lawyer", "assistant", "member", "intern"];
+  const sections = [
+    { id: "dashboard", label: "الرئيسية" },
+    { id: "cases", label: "القضايا" },
+    { id: "clients", label: "الموكلين" },
+    { id: "documents", label: "المستندات" },
+    { id: "tasks", label: "المهام" },
+    { id: "appointments", label: "المواعيد" },
+    { id: "finance", label: "المالية" },
+    { id: "reports", label: "التقارير" },
+    { id: "memo-editor", label: "محرر المذكرات" },
+    { id: "calculators", label: "الحاسبات" },
+    { id: "pleading", label: "مساعد المرافعة" },
+    { id: "maps", label: "الخرائط" },
+    { id: "ai-thinker", label: "المفكر القانوني" },
+    { id: "text-analyzer", label: "محلل النصوص" },
+    { id: "performance", label: "تحليل الأداء" },
+    { id: "development", label: "التطوير المهني" },
+    { id: "settings", label: "الإعدادات" },
+    { id: "team", label: "المستخدمون" },
+    { id: "backup", label: "النسخ الاحتياطي" },
+    { id: "security", label: "الأمان" },
+    { id: "updates", label: "التحديثات" },
+    { id: "research", label: "البحث العلمي" },
+  ] as const;
+
+  const levelColors: Record<string, string> = {
+    full: "bg-emerald-500",
+    view: "bg-amber-400",
+    none: "bg-red-400",
+  };
+
+  const levelLabels: Record<string, string> = {
+    full: "كامل",
+    view: "عرض",
+    none: "ممنوع",
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">مصفوفة الصلاحيات حسب الدور</CardTitle>
+        <CardDescription>عرض الصلاحيات الافتراضية لكل دور</CardDescription>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b">
+              <th className="text-right p-2 font-medium">القسم</th>
+              {roles.map((r) => (
+                <th key={r} className="text-center p-2 font-medium">{ROLE_LABELS[r]}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sections.map((s) => (
+              <tr key={s.id} className="border-b hover:bg-accent/30">
+                <td className="p-2 font-medium">{s.label}</td>
+                {roles.map((r) => {
+                  const level = DEFAULT_PERMISSIONS[r][s.id as SectionId] ?? "none";
+                  return (
+                    <td key={r} className="text-center p-2">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-white text-[10px] ${levelColors[level]}`}
+                      >
+                        {levelLabels[level]}
+                      </span>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </CardContent>
     </Card>
   );

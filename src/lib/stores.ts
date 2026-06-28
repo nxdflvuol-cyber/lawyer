@@ -23,6 +23,7 @@ interface AuthState {
   logout: () => void;
   setIdleTimeout: (minutes: number) => void;
   resetIdle: () => void;
+  updateUser: (updates: Partial<AuthUser>) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -36,6 +37,10 @@ export const useAuthStore = create<AuthState>()(
       logout: () => set({ isAuthenticated: false, user: null, loginAt: null }),
       setIdleTimeout: (idleTimeout) => set({ idleTimeout }),
       resetIdle: () => set({ loginAt: Date.now() }),
+      updateUser: (updates) =>
+        set((state) => ({
+          user: state.user ? { ...state.user, ...updates } : null,
+        })),
     }),
     { name: "shamel-auth" }
   )

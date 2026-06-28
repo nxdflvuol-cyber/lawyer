@@ -32,6 +32,7 @@ import {
   Settings as SettingsIcon,
   LogOut,
   User,
+  UserCog,
   ChevronLeft,
   Building2,
   Gavel,
@@ -44,6 +45,7 @@ import { useTheme } from "next-themes";
 import { useToast } from "@/hooks/use-toast";
 import { WorkModeSelector } from "@/components/work-mode-selector";
 import { GlobalSearch } from "@/components/global-search";
+import { hasAccess, isAdmin, ROLE_LABELS } from "@/lib/permissions";
 
 export function AppShell() {
   const activeSection = useNavStore((s) => s.activeSection);
@@ -62,6 +64,9 @@ export function AppShell() {
   const { toast } = useToast();
   // router removed - not used
 
+  // صلاحيات المستخدم الحالي
+  const userRole = user?.role ?? "member";
+
   const activeDef = useMemo(
     () => SECTIONS.find((s) => s.id === activeSection),
     [activeSection]
@@ -70,11 +75,13 @@ export function AppShell() {
   const groupedSections = useMemo(() => {
     const groups: Record<string, typeof SECTIONS> = {};
     SECTIONS.forEach((s) => {
+      // تطبيق الصلاحيات - إخفاء الأقسام غير المسموح بها
+      if (!hasAccess(userRole, s.id)) return;
       if (!groups[s.group]) groups[s.group] = [];
       groups[s.group].push(s);
     });
     return groups;
-  }, []);
+  }, [userRole]);
 
   function handleSectionClick(sectionId: typeof activeSection) {
     if (sectionId === "logout") {
@@ -302,17 +309,30 @@ export function AppShell() {
               <div>
                 <p className="font-medium">{user?.name}</p>
                 <p className="text-xs text-muted-foreground">{user?.email}</p>
+                <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-primary/10 text-primary">
+                  {ROLE_LABELS[userRole] ?? userRole}
+                </span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setSection("settings")}>
-              <SettingsIcon className="w-4 h-4 ml-2" />
-              الإعدادات
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setSection("security")}>
-              <Shield className="w-4 h-4 ml-2" />
-              الأمان والخصوصية
-            </DropdownMenuItem>
+            {hasAccess(userRole, "settings") && (
+              <DropdownMenuItem onClick={() => setSection("settings")}>
+                <SettingsIcon className="w-4 h-4 ml-2" />
+                الإعدادات
+              </DropdownMenuItem>
+            )}
+            {hasAccess(userRole, "security") && (
+              <DropdownMenuItem onClick={() => setSection("security")}>
+                <Shield className="w-4 h-4 ml-2" />
+                الأمان والخصوصية
+              </DropdownMenuItem>
+            )}
+            {isAdmin(userRole) && (
+              <DropdownMenuItem onClick={() => setSection("team")}>
+                <UserCog className="w-4 h-4 ml-2" />
+                إدارة المستخدمين
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive"
@@ -343,7 +363,11 @@ export function AppShell() {
         {/* منطقة المحتوى */}
         <main className="flex-1 overflow-auto bg-background legal-pattern">
           <div className="p-4 md:p-6 max-w-[1600px] mx-auto">
-            {renderSection(activeSection)}
+            {hasAccess(userRole, activeSection) ? (
+              renderSection(activeSection)
+            ) : (
+              <NoAccessMessage />
+            )}
           </div>
           <Footer />
         </main>
@@ -375,6 +399,20 @@ function Footer() {
         </div>
       </div>
     </footer>
+  );
+}
+
+function NoAccessMessage() {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+      <div className="w-16 h-16 rounded-full bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center mb-4">
+        <Shield className="w-8 h-8 text-amber-600" />
+      </div>
+      <h2 className="text-xl font-bold mb-2">لا توجد صلاحية للوصول</h2>
+      <p className="text-muted-foreground max-w-md">
+        ليس لديك صلاحية للوصول إلى هذا القسم. يرجى التواصل مع المدير لمنحك الصلاحية المناسبة.
+      </p>
+    </div>
   );
 }
 
