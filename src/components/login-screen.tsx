@@ -33,12 +33,24 @@ export function LoginScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+
+      // التحقق من نوع الاستجابة
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        toast({
+          title: "خطأ في الخادم",
+          description: "الخادم لا يستجيب بشكل صحيح. تأكد من تشغيل: bun run db:push",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const data = await res.json();
 
-      if (!data.success) {
+      if (!res.ok || !data.success) {
         toast({
           title: "فشل تسجيل الدخول",
-          description: data.error,
+          description: data.error ?? `خطأ ${res.status}`,
           variant: "destructive",
         });
         return;
@@ -49,10 +61,11 @@ export function LoginScreen() {
         title: "مرحباً بك",
         description: `تم تسجيل الدخول بنجاح، ${data.user.name}`,
       });
-    } catch {
+    } catch (error) {
+      console.error("Login error:", error);
       toast({
-        title: "خطأ",
-        description: "تعذر الاتصال بالخادم",
+        title: "خطأ في الاتصال",
+        description: "تعذر الاتصال بالخادم. تأكد من تشغيل الخادم ومن تهيئة قاعدة البيانات (bun run db:push)",
         variant: "destructive",
       });
     } finally {
