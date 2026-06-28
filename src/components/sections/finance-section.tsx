@@ -1085,7 +1085,7 @@ function CreateFinanceDialog({
           })}
         </div>
 
-        <ScrollArea className="flex-1 px-1">
+        <div className="flex-1 overflow-y-auto px-1">
           <div className="space-y-4 py-2">
             {kind === "fee" && (
               <>
@@ -1410,9 +1410,9 @@ function CreateFinanceDialog({
               </>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>إلغاء</Button>
           <Button onClick={handleSubmit} disabled={createMutation.isPending}>
             {createMutation.isPending ? "جارٍ الحفظ..." : "حفظ"}

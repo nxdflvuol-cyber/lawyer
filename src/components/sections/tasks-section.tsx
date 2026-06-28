@@ -946,7 +946,7 @@ function CreateTaskDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 -mx-6 px-6">
+        <div className="flex-1 overflow-y-auto -mx-6 px-6">
           <div className="space-y-4 pb-2">
             <div className="space-y-1.5">
               <Label>
@@ -1101,9 +1101,9 @@ function CreateTaskDialog({
               </div>
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter className="border-t pt-4">
+        <DialogFooter className="flex-shrink-0 border-t pt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             إلغاء
           </Button>
@@ -1331,7 +1331,7 @@ function TaskDetailSheet({
           </div>
         </SheetHeader>
 
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-y-auto">
           <div className="p-4 space-y-4">
             {/* أزرار الحالة السريعة */}
             {!editing && (
@@ -1594,7 +1594,7 @@ function TaskDetailSheet({
               </CardContent>
             </Card>
           </div>
-        </ScrollArea>
+        </div>
 
         {/* تأكيد الحذف */}
         <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>

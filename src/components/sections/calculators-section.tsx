@@ -236,7 +236,7 @@ function CalcDialog({ calc, onClose }: { calc: CalculatorDef; onClose: () => voi
           <DialogDescription>{calc.description}</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-y-auto">
           <div className="py-2">
             {calc.id === "deadline" && <DeadlineCalculator />}
             {calc.id === "compensation" && <CompensationCalculator />}
@@ -245,7 +245,7 @@ function CalcDialog({ calc, onClose }: { calc: CalculatorDef; onClose: () => voi
             {calc.id === "alimony" && <AlimonyCalculator />}
             {calc.id === "workers_comp" && <WorkersCompCalculator />}
           </div>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );

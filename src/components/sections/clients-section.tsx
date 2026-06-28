@@ -771,7 +771,7 @@ function CreateClientDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 -mx-6 px-6">
+        <div className="flex-1 overflow-y-auto -mx-6 px-6">
           <div className="space-y-4 pb-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -1038,9 +1038,9 @@ function CreateClientDialog({
               />
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter className="border-t pt-4">
+        <DialogFooter className="border-t pt-4 flex-shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             إلغاء
           </Button>
@@ -1236,7 +1236,7 @@ function ClientDetailSheet({
               </TabsList>
             </div>
 
-            <ScrollArea className="flex-1">
+            <div className="flex-1 overflow-y-auto">
               <div className="p-4">
                 <TabsContent value="overview" className="mt-0">
                   <ClientOverviewTab
@@ -1279,7 +1279,7 @@ function ClientDetailSheet({
                   />
                 </TabsContent>
               </div>
-            </ScrollArea>
+            </div>
           </Tabs>
         ) : (
           <div className="flex-1 flex items-center justify-center">

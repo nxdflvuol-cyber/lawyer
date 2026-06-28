@@ -930,7 +930,7 @@ function UploadDocumentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 -mx-6 px-6">
+        <div className="flex-1 overflow-y-auto -mx-6 px-6">
           <div className="space-y-4 pb-2">
             {/* منطقة رفع الملف */}
             <div
@@ -1117,9 +1117,9 @@ function UploadDocumentDialog({
               />
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter className="border-t pt-4">
+        <DialogFooter className="flex-shrink-0 border-t pt-4">
           <Button
             variant="outline"
             onClick={() => {
@@ -1342,7 +1342,7 @@ function DocumentDetailSheet({
             ))}
           </div>
         ) : docDetail ? (
-          <ScrollArea className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             <div className="p-4 space-y-4">
               {/* معاينة الملف */}
               <Card>
@@ -1618,7 +1618,7 @@ function DocumentDetailSheet({
                 </Card>
               )}
             </div>
-          </ScrollArea>
+          </div>
         ) : null}
 
         {/* تأكيد الحذف */}
