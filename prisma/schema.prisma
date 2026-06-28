@@ -1,0 +1,523 @@
+// ============================================================
+// المحامي الشامل - مخطط قاعدة البيانات الشامل
+// Comprehensive Legal Management System Database Schema
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// المستخدمون والصلاحيات
+// ============================================================
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("lawyer") // lawyer | assistant | admin
+  pin          String?
+  avatar       String?
+  phone        String?
+  isActive     Boolean  @default(true)
+  lastLogin    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tasks        Task[]
+  appointments Appointment[]
+  expenses     Expense[]
+  timeEntries  TimeEntry[]
+  auditLogs    AuditLog[]
+  aiChats      AiConversation[]
+  memos        Memo[]
+  communications Communication[]
+}
+
+model Setting {
+  id    String @id
+  value String
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+// ============================================================
+// الموكلون
+// ============================================================
+
+model Client {
+  id              String   @id @default(cuid())
+  fullName        String
+  clientType      String   @default("individual") // individual | company | government | nonprofit
+  idNumber        String?  // رقم الهوية / السجل التجاري
+  taxNumber       String?
+  nationality     String?
+  birthDate       DateTime?
+  gender          String?
+  phone           String?
+  phone2          String?
+  email           String?
+  address         String?
+  city            String?
+  country         String?
+  status          String   @default("active") // active | former | potential | consultation
+  notes           String?
+  criminalRecord  String?
+  medicalRecord   String?
+  // بيانات الشركة
+  companyType     String?
+  incorporationDate DateTime?
+  legalForm       String?
+  // الحقول المخصصة (JSON)
+  customFields    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  cases           Case[]
+  documents       Document[]
+  communications  Communication[]
+  payments        Payment[]
+  powers          PowerOfAttorney[]
+  tasks           Task[]
+  appointments    Appointment[]
+}
+
+model PowerOfAttorney {
+  id             String   @id @default(cuid())
+  clientId       String
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  poaNumber      String
+  issuer         String   // جهة التوثيق
+  poaType        String   // نوع التوكيل
+  scope          String   // نطاق الصلاحيات
+  issueDate      DateTime
+  expiryDate     DateTime?
+  status         String   @default("active") // active | expired | revoked
+  imageData      String?  // base64 صورة التوكيل
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Communication {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  type        String   // call | meeting | email | message | visit
+  subject     String
+  summary     String
+  followUp    String?
+  followUpDate DateTime?
+  priority    String   @default("normal")
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// القضايا
+// ============================================================
+
+model Case {
+  id                String   @id @default(cuid())
+  internalNumber    String
+  officialNumber    String?
+  year              Int
+  caseType          String   // civil | commercial | administrative | criminal | personal_status | state_council
+  caseSubType       String?  // تصنيف دقيق
+  court             String?
+  circuit           String?
+  degree            String   @default("primary") // primary | appeal | cassation
+  judgeName         String?
+  judgeNotes        String?
+  clientId          String
+  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  opponentName      String?
+  opponentLawyer    String?
+  status            String   @default("active") // active | pending | closed | won | lost | settled
+  startDate         DateTime
+  endDate           DateTime?
+  result            String?
+  executionStatus   String   @default("none") // none | in_progress | executed
+  facts             String?  // تفاصيل الوقائع
+  strategy          String?  // الاستراتيجية
+  estimatedValue    Float?
+  priority          String   @default("medium")
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  sessions          CaseSession[]
+  procedures        CaseProcedure[]
+  documents         Document[]
+  tasks             Task[]
+  appointments      Appointment[]
+  fees              Fee[]
+  expenses          Expense[]
+  evidences         Evidence[]
+  adjournments      String?
+}
+
+model CaseSession {
+  id            String   @id @default(cuid())
+  caseId        String
+  case          Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  sessionDate   DateTime
+  sessionNumber Int?
+  court         String?
+  circuit       String?
+  judgeName     String?
+  purpose       String?  // الغرض من الجلسة
+  attendees     String?
+  facts         String?  // ملخص وقائع الجلسة
+  opponentRequests String?
+  opponentDefenses String?
+  lawyerPleading String?
+  decisions     String?
+  adjournReason String?
+  nextSessionDate DateTime?
+  documentsRequested String?
+  courtStance   String?  // تقييم موقف المحكمة
+  opponentStance String?
+  strategy      String?
+  createdAt     DateTime @default(now())
+}
+
+model CaseProcedure {
+  id          String   @id @default(cuid())
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  date        DateTime
+  type        String   // filing | notification | hearing | ruling | appeal | execution
+  description String
+  performedBy String?
+  result      String?
+  nextAction  String?
+  status      String   @default("pending") // pending | in_progress | completed | cancelled
+  documentId  String?
+  createdAt   DateTime @default(now())
+}
+
+model Evidence {
+  id          String   @id @default(cuid())
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  evidenceType String?  // documentary | testimonial | material | expert
+  submittedDate DateTime?
+  status      String   @default("collected")
+  documentId  String?
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// المستندات
+// ============================================================
+
+model Document {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  docType     String   // pdf | image | word | text | audio | other
+  category    String?  // contract | pleading | ruling | evidence | correspondence | other
+  fileName    String
+  fileSize    Int?
+  mimeType    String?
+  fileData    String   // base64 data
+  textContent String?  // النص المستخرج للبحث
+  tags        String?  // مفصولة بفواصل
+  folder      String?
+  caseId      String?
+  case        Case?    @relation(fields: [caseId], references: [id])
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id])
+  uploadedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============================================================
+// المهام
+// ============================================================
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  status      String   @default("todo") // todo | in_progress | completed | cancelled
+  priority    String   @default("medium") // low | medium | high | urgent
+  dueDate     DateTime?
+  reminderDate DateTime?
+  caseId      String?
+  case        Case?    @relation(fields: [caseId], references: [id])
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id])
+  assignedToId String?
+  assignedTo  User?    @relation(fields: [assignedToId], references: [id])
+  parentTaskId String?
+  estimatedHours Float?
+  actualHours Float?
+  tags        String?
+  checklist   String?  // JSON array
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TimeEntry {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  caseId      String?
+  taskId      String?
+  description String
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int?     // minutes
+  billable    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// المواعيد
+// ============================================================
+
+model Appointment {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime?
+  allDay      Boolean  @default(false)
+  eventType   String   @default("other") // court_session | client_meeting | deadline | task | consultation | hearing
+  location    String?
+  court       String?
+  caseId      String?
+  case        Case?    @relation(fields: [caseId], references: [id])
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id])
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  reminder    Int?     // دقائق قبل الموعد
+  color       String?
+  status      String   @default("scheduled") // scheduled | completed | cancelled
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// المالية
+// ============================================================
+
+model Fee {
+  id          String   @id @default(cuid())
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  feeType     String   // fixed | hourly | percentage | mixed | staged
+  amount      Float
+  paidAmount  Float    @default(0)
+  description String?
+  dueDate     DateTime?
+  status      String   @default("unpaid") // unpaid | partial | paid
+  createdAt   DateTime @default(now())
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  caseId      String?
+  feeId       String?
+  amount      Float
+  paymentDate DateTime @default(now())
+  paymentMethod String? // cash | check | transfer | card
+  reference   String?
+  notes       String?
+  invoiceNumber String?
+  createdAt   DateTime @default(now())
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  caseId      String?
+  case        Case?    @relation(fields: [caseId], references: [id])
+  clientId    String?
+  category    String   // court_fees | travel | documents | experts | other
+  amount      Float
+  expenseDate DateTime @default(now())
+  description String?
+  receiptData String?  // base64
+  createdAt   DateTime @default(now())
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  invoiceNumber String   @unique
+  clientId      String?
+  caseId        String?
+  issueDate     DateTime @default(now())
+  dueDate       DateTime?
+  items         String   // JSON
+  subtotal      Float
+  taxRate       Float    @default(0)
+  taxAmount     Float    @default(0)
+  total         Float
+  paidAmount    Float    @default(0)
+  status        String   @default("draft") // draft | sent | paid | overdue
+  notes         String?
+  createdAt     DateTime @default(now())
+}
+
+// ============================================================
+// المذكرات والمستندات القانونية
+// ============================================================
+
+model Memo {
+  id          String   @id @default(cuid())
+  title       String
+  memoType    String   @default("memo") // memo | contract | pleading | letter | consultation
+  caseId      String?
+  clientId    String?
+  content     String   // HTML content
+  plainText   String?
+  templateId  String?
+  authorId    String?
+  author      User?    @relation(fields: [authorId], references: [id])
+  version     Int      @default(1)
+  status      String   @default("draft") // draft | final | archived
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  templateType String  // memo | contract | pleading | report | letter
+  category    String?
+  content     String
+  variables   String?  // JSON
+  isBuiltIn   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============================================================
+// الذكاء الاصطناعي
+// ============================================================
+
+model AiConversation {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  title       String?
+  context     String?  // case | client | document | general
+  contextId   String?
+  messages    String   // JSON array of {role, content, timestamp}
+  summary     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============================================================
+// المحاكم والقضاة
+// ============================================================
+
+model Court {
+  id          String   @id @default(cuid())
+  name        String
+  courtType   String?  // primary | appeal | cassation | administrative
+  address     String?
+  city        String?
+  phone       String?
+  workingHours String?
+  location    String?  // إحداثيات
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+model Judge {
+  id          String   @id @default(cuid())
+  name        String
+  court       String?
+  circuit     String?
+  tendencies  String?  // ملاحظات عن التوجهات
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// المكتبة القانونية
+// ============================================================
+
+model LegalLibrary {
+  id          String   @id @default(cuid())
+  title       String
+  itemType    String   // law | precedent | template | jurisprudence | article
+  category    String?
+  content     String
+  reference   String?
+  source      String?
+  tags        String?
+  publishedDate DateTime?
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// أعضاء المكتب
+// ============================================================
+
+model TeamMember {
+  id          String   @id @default(cuid())
+  name        String
+  position    String?
+  email       String?
+  phone       String?
+  role        String   @default("member")
+  hireDate    DateTime?
+  salary      Float?
+  isActive    Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+model Attendance {
+  id          String   @id @default(cuid())
+  memberId    String?
+  date        DateTime @default(now())
+  checkIn     DateTime?
+  checkOut    DateTime?
+  status      String   @default("present")
+  notes       String?
+}
+
+// ============================================================
+// النسخ الاحتياطي
+// ============================================================
+
+model Backup {
+  id          String   @id @default(cuid())
+  fileName    String
+  fileSize    Int?
+  backupType  String   @default("full") // full | partial | incremental
+  status      String   @default("completed")
+  itemCount   Int?
+  notes       String?
+  createdAt   DateTime @default(now())
+}
