@@ -1225,17 +1225,22 @@ function TelegramSettingsCard() {
   async function checkBotStatus() {
     setBotStatus("checking");
     try {
-      const res = await fetch("/health?XTransformPort=3004");
+      const res = await fetch("/api/telegram/health");
       const data = await res.json();
-      setBotStatus(data.bot === "configured" ? "online" : "offline");
+      const isOnline = data.bot === "configured" && data.telegramConnected;
+      setBotStatus(isOnline ? "online" : data.bot === "configured" ? "offline" : "offline");
       toast({
-        title: data.bot === "configured" ? "البوت يعمل ✅" : "البوت غير مُعد ❌",
-        description: data.bot === "configured" ? `التوكن: ${data.botTokenPreview}` : "لم يتم حفظ رمز البوت",
-        variant: data.bot === "configured" ? "default" : "destructive",
+        title: isOnline ? "البوت يعمل ✅" : "البوت غير متصل ❌",
+        description: isOnline
+          ? `متصل بـ @${data.botUsername}`
+          : data.bot === "configured"
+          ? "التوكن محفوظ لكن تعذر الاتصال بـ Telegram"
+          : "لم يتم حفظ رمز البوت",
+        variant: isOnline ? "default" : "destructive",
       });
     } catch {
       setBotStatus("offline");
-      toast({ title: "تعذر الوصول للبوت", description: "تأكد من تشغيل خدمة البوت", variant: "destructive" });
+      toast({ title: "تعذر فحص البوت", description: "تأكد من تشغيل الخادم", variant: "destructive" });
     }
   }
 
@@ -1280,15 +1285,15 @@ function TelegramSettingsCard() {
       return;
     }
     try {
-      const res = await fetch("/send-test?XTransformPort=3004", { method: "POST" });
+      const res = await fetch("/api/telegram/send-test", { method: "POST" });
       const data = await res.json();
       if (data.success) {
         toast({ title: "تم إرسال رسالة تجريبية ✅", description: data.message });
       } else {
-        toast({ title: "فشل الإرسال", description: data.error, variant: "destructive" });
+        toast({ title: "فشل الإرسال", description: data.error ?? data.message, variant: "destructive" });
       }
     } catch {
-      toast({ title: "خطأ في الاتصال بالبوت", description: "تأكد من تشغيل خدمة البوت", variant: "destructive" });
+      toast({ title: "خطأ في الاتصال", description: "تأكد من تشغيل الخادم", variant: "destructive" });
     }
   }
 
