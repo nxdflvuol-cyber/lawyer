@@ -44,6 +44,8 @@ import {
   Trash2,
   Edit3,
   Power,
+  Send,
+  MessageCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
@@ -95,7 +97,7 @@ export function SettingsSection() {
       </div>
 
       <Tabs defaultValue="general">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-7">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-8">
           <TabsTrigger value="general">عام</TabsTrigger>
           <TabsTrigger value="appearance">المظهر</TabsTrigger>
           <TabsTrigger value="security">الأمان</TabsTrigger>
@@ -103,11 +105,15 @@ export function SettingsSection() {
           <TabsTrigger value="modes">أوضاع</TabsTrigger>
           <TabsTrigger value="ai" className="flex items-center gap-1">
             <Brain className="w-3.5 h-3.5" />
-            الذكاء AI
+            AI
           </TabsTrigger>
           <TabsTrigger value="users" className="flex items-center gap-1">
             <UserCog className="w-3.5 h-3.5" />
             المستخدمون
+          </TabsTrigger>
+          <TabsTrigger value="telegram" className="flex items-center gap-1">
+            <MessageCircle className="w-3.5 h-3.5" />
+            تليجرام
           </TabsTrigger>
         </TabsList>
 
@@ -394,6 +400,11 @@ export function SettingsSection() {
         {/* المستخدمون والصلاحيات */}
         <TabsContent value="users" className="space-y-4">
           <UsersManagementCard />
+        </TabsContent>
+
+        {/* تليجرام */}
+        <TabsContent value="telegram" className="space-y-4">
+          <TelegramSettingsCard />
         </TabsContent>
       </Tabs>
     </div>
@@ -1156,5 +1167,317 @@ function PermissionsMatrix() {
         </table>
       </CardContent>
     </Card>
+  );
+}
+
+// ============================================================
+// بطاقة إعدادات تليجرام
+// ============================================================
+function TelegramSettingsCard() {
+  const { toast } = useToast();
+  const [botToken, setBotToken] = useState("");
+  const [hasToken, setHasToken] = useState(false);
+  const [authorizedIds, setAuthorizedIds] = useState<string[]>([]);
+  const [newChatId, setNewChatId] = useState("");
+  const [botStatus, setBotStatus] = useState<"idle" | "checking" | "online" | "offline">("idle");
+  const [loaded, setLoaded] = useState(false);
+
+  // جلب الإعدادات الحالية
+  useQuery({
+    queryKey: ["telegram-settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/telegram");
+      const data = await res.json();
+      if (data.success) {
+        setHasToken(data.config.hasToken);
+        setAuthorizedIds(data.config.authorizedChatIds ?? []);
+      }
+      setLoaded(true);
+      return data;
+    },
+    enabled: !loaded,
+  });
+
+  async function saveToken() {
+    if (!botToken.trim()) {
+      toast({ title: "أدخل رمز البوت", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await fetch("/api/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ botToken }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast({ title: "تم الحفظ", description: "تم حفظ رمز البوت" });
+        setBotToken("");
+        setHasToken(true);
+      } else {
+        toast({ title: "خطأ", description: data.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "خطأ في الحفظ", variant: "destructive" });
+    }
+  }
+
+  async function checkBotStatus() {
+    setBotStatus("checking");
+    try {
+      const res = await fetch("/api/telegram?XTransformPort=3004/health");
+      const data = await res.json();
+      setBotStatus(data.bot === "configured" ? "online" : "offline");
+      toast({
+        title: data.bot === "configured" ? "البوت يعمل" : "البوت غير مُعد",
+        variant: data.bot === "configured" ? "default" : "destructive",
+      });
+    } catch {
+      setBotStatus("offline");
+      toast({ title: "تعذر الوصول للبوت", variant: "destructive" });
+    }
+  }
+
+  async function addChatId() {
+    if (!newChatId.trim()) return;
+    const updated = [...authorizedIds, newChatId.trim()];
+    try {
+      const res = await fetch("/api/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatIds: updated }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAuthorizedIds(updated);
+        setNewChatId("");
+        toast({ title: "تمت الإضافة", description: "تم تفويض معرف تليجرام" });
+      }
+    } catch {
+      toast({ title: "خطأ", variant: "destructive" });
+    }
+  }
+
+  async function removeChatId(id: string) {
+    const updated = authorizedIds.filter((x) => x !== id);
+    try {
+      await fetch("/api/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatIds: updated }),
+      });
+      setAuthorizedIds(updated);
+      toast({ title: "تم الحذف" });
+    } catch {
+      toast({ title: "خطأ", variant: "destructive" });
+    }
+  }
+
+  async function sendTestMessage() {
+    if (authorizedIds.length === 0) {
+      toast({ title: "أضف معرف تليجرام أولاً", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await fetch("/api/telegram?XTransformPort=3004/send-test", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        toast({ title: "تم إرسال رسالة تجريبية" });
+      } else {
+        toast({ title: "فشل الإرسال", description: data.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "خطأ", variant: "destructive" });
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageCircle className="w-5 h-5 text-primary" />
+            مساعد تليجرام
+          </CardTitle>
+          <CardDescription>
+            ربط النظام مع بوت تليجرام للاستعلام عن القضايا والمواعيد والمستحقات من أي مكان
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* حالة البوت */}
+          <div className={`flex items-center gap-3 p-3 rounded-lg border ${
+            botStatus === "online" ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800" :
+            botStatus === "offline" ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800" :
+            "bg-muted/50 border-border"
+          }`}>
+            <div className={`p-2 rounded-full ${
+              botStatus === "online" ? "bg-emerald-100 text-emerald-600" :
+              botStatus === "offline" ? "bg-red-100 text-red-600" :
+              "bg-muted text-muted-foreground"
+            }`}>
+              <MessageCircle className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium">
+                {botStatus === "checking" ? "جارٍ الفحص..." :
+                 botStatus === "online" ? "البوت يعمل" :
+                 botStatus === "offline" ? "البوت متوقف" :
+                 hasToken ? "البوت مُعد - اضغط فحص للتأكد" : "البوت غير مُعد"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {hasToken ? "رمز البوت محفوظ" : "لم يتم إدخال رمز البوت"}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={checkBotStatus} disabled={botStatus === "checking"}>
+              {botStatus === "checking" ? <Loader2 className="w-4 h-4 ml-2 animate-spin" /> : <Wifi className="w-4 h-4 ml-2" />}
+              فحص
+            </Button>
+          </div>
+
+          {/* رمز البوت */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <MessageCircle className="w-4 h-4 text-muted-foreground" />
+              رمز البوت (Bot Token) {hasToken && <span className="text-xs text-emerald-600">(موجود)</span>}
+            </Label>
+            <Input
+              type="password"
+              value={botToken}
+              onChange={(e) => setBotToken(e.target.value)}
+              placeholder={hasToken ? "••••••••••••••••" : "123456789:ABCdefGHIjklMNOpqrSTUvwxYZ"}
+              dir="ltr"
+              className="text-left"
+            />
+            <p className="text-xs text-muted-foreground">
+              احصل على الرمز من BotFather على تليجرام. اكتب <code dir="ltr">@BotFather</code> ثم <code dir="ltr">/newbot</code>
+            </p>
+          </div>
+
+          <Button onClick={saveToken} disabled={!botToken.trim()}>
+            <Save className="w-4 h-4 ml-2" />
+            حفظ الرمز
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* المعرفات المصرح لها */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <User className="w-5 h-5 text-primary" />
+            معرفات تليجرام المصرح لها
+          </CardTitle>
+          <CardDescription>
+            قائمة معرفات الشات المسموح لها باستخدام البوت
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            <Input
+              value={newChatId}
+              onChange={(e) => setNewChatId(e.target.value)}
+              placeholder="معرف تليجرام (مثل: 123456789)"
+              dir="ltr"
+              className="text-left"
+            />
+            <Button onClick={addChatId} disabled={!newChatId.trim()}>
+              <Plus className="w-4 h-4 ml-2" />
+              إضافة
+            </Button>
+          </div>
+
+          {authorizedIds.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-4">
+              لا توجد معرفات مصرح لها بعد
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {authorizedIds.map((id) => (
+                <div key={id} className="group flex items-center gap-3 p-2 rounded-md border border-border">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <User className="w-4 h-4 text-primary" />
+                  </div>
+                  <span className="font-mono text-sm flex-1" dir="ltr">{id}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 text-destructive opacity-0 group-hover:opacity-100"
+                    onClick={() => removeChatId(id)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="pt-3 border-t">
+            <Button onClick={sendTestMessage} variant="outline" className="w-full" disabled={authorizedIds.length === 0}>
+              <Send className="w-4 h-4 ml-2" />
+              إرسال رسالة تجريبية
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* دليل الاستخدام */}
+      <Card className="bg-gradient-to-l from-primary/5 to-accent/5 border-primary/20">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageCircle className="w-5 h-5 text-primary" />
+            دليل الاستخدام
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <div>
+            <p className="font-medium mb-1"> setup البوت:</p>
+            <ol className="list-decimal pr-5 space-y-1 text-xs text-muted-foreground">
+              <li>افتح تليجرام وابحث عن <code dir="ltr">@BotFather</code></li>
+              <li>أرسل <code dir="ltr">/newbot</code> وأنشئ بوتاً جديداً</li>
+              <li>انسخ الرمز (Bot Token) والصقه أعلاه</li>
+              <li>اضغط "حفظ الرمز"</li>
+              <li>افتح البوت الذي أنشأته وأرسل <code dir="ltr">/start</code></li>
+              <li>انسخ معرف الشات الذي يظهر لك وأضفه في القائمة أعلاه</li>
+              <li>اضغط "فحص" للتأكد من عمل البوت</li>
+            </ol>
+          </div>
+
+          <div>
+            <p className="font-medium mb-1">الأوامر المتاحة في تليجرام:</p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2 rounded bg-card border border-border">
+                <code dir="ltr">/start</code> - بدء الاستخدام
+              </div>
+              <div className="p-2 rounded bg-card border border-border">
+                <code dir="ltr">/help</code> - المساعدة
+              </div>
+              <div className="p-2 rounded bg-card border border-border">
+                <code dir="ltr">/stats</code> - إحصائيات سريعة
+              </div>
+              <div className="p-2 rounded bg-card border border-border">
+                <code dir="ltr">/appointments</code> - مواعيد اليوم
+              </div>
+              <div className="p-2 rounded bg-card border border-border">
+                <code dir="ltr">/tasks</code> - مهام معلقة
+              </div>
+              <div className="p-2 rounded bg-card border border-border">
+                أو اكتب سؤالك بالعربية
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-400">
+            <p className="font-medium mb-1">💡 أمثلة للاستخدام:</p>
+            <ul className="space-y-1 list-disc pr-4">
+              <li>"اعرض قضاياي النشطة"</li>
+              <li>"ما جلسات الغد؟"</li>
+              <li>"لخص قضية رقم 2024/123"</li>
+              <li>"فيه مستحقات متأخرة؟"</li>
+              <li>"أضف مهمة: متابعة مذكرة الدفاع"</li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

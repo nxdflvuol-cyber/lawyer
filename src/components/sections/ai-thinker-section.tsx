@@ -29,6 +29,8 @@ import {
   User,
   Bot,
   CheckCircle,
+  Zap,
+  XCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -38,6 +40,11 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  actions?: Array<{
+    tool: string;
+    args: Record<string, unknown>;
+    result: { success: boolean; message?: string; error?: string };
+  }>;
 }
 
 interface Conversation {
@@ -49,12 +56,16 @@ interface Conversation {
 }
 
 const QUICK_PROMPTS = [
-  { icon: FileText, label: "صحيفة دعوى مدنية", prompt: "اكتب لي صحيفة دعوى مدنية كاملة مع الهيكل القانوني الصحيح، اذكر المتطلبات الأساسية واطلب مني تفاصيل القضية." },
-  { icon: Scale, label: "تحليل قضية", prompt: "أريد تحليل قضية واقتراح استراتيجية قانونية. سأعطيك تفاصيل القضية، فحللها وقدّم أفضل الاستراتيجيات." },
-  { icon: FileText, label: "مذكرة دفاع", prompt: "اكتب لي مذكرة دفاع قانونية كاملة. سأزودك ببيانات القضية ووقائعها." },
-  { icon: Sparkles, label: "صياغة عقد", prompt: "صُغ لي عقد بيع قانوني محكم. اسألني عن نوع العقد والأطراف والشروط المهمة." },
-  { icon: Brain, label: "استشارة قانونية", prompt: "أحتاج استشارة قانونية. سأشرح لك الموقف وأريد منك النصح بأفضل الإجراءات القانونية." },
-  { icon: Scale, label: "اقتراح دفوع", prompt: "بناءً على وقائع القضية التي سأذكرها، اقترح لي الدفوع القانونية الموضوعية الممكنة." },
+  { icon: Zap, label: "جلسات الغد", prompt: "ما هي الجلسات والمواعيد الموجودة غداً؟" },
+  { icon: Zap, label: "المهام المتأخرة", prompt: "اعرض لي المهام المتأخرة" },
+  { icon: Zap, label: "مستحقات متأخرة", prompt: "هل توجد مستحقات أو أتعاب متأخرة؟ اعرض تقرير" },
+  { icon: Zap, label: "إحصائيات النظام", prompt: "أعطني إحصائيات عامة عن النظام" },
+  { icon: Zap, label: "قضايا نشطة", prompt: "اعرض لي القضايا النشطة حالياً" },
+  { icon: Zap, label: "ملخص مالي", prompt: "أعطني ملخص مالي شامل للنظام" },
+  { icon: FileText, label: "صحيفة دعوى", prompt: "اكتب لي صحيفة دعوى مدنية كاملة مع الهيكل القانوني الصحيح" },
+  { icon: Scale, label: "تحليل قضية", prompt: "أريد تحليل قضية واقتراح استراتيجية قانونية. سأعطيك تفاصيل القضية" },
+  { icon: Sparkles, label: "صياغة عقد", prompt: "صُغ لي عقد بيع قانوني محكم. اسألني عن التفاصيل" },
+  { icon: Brain, label: "استشارة قانونية", prompt: "أحتاج استشارة قانونية. سأشرح لك الموقف" },
 ];
 
 export function AiThinkerSection() {
@@ -187,6 +198,7 @@ export function AiThinkerSection() {
         role: "assistant",
         content: data.response,
         timestamp: Date.now(),
+        actions: data.actions ?? [],
       };
 
       setConversations((prev) =>
@@ -410,6 +422,34 @@ export function AiThinkerSection() {
                   {msg.role === "assistant" ? (
                     <div className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1 [&_ul]:my-2 [&_ol]:my-2 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm">
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      {/* عرض الإجراءات المنفذة */}
+                      {msg.actions && msg.actions.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-border/50 space-y-1.5">
+                          <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-1">
+                            <Zap className="w-3 h-3 text-amber-500" />
+                            إجراءات منفذة ({msg.actions.length}):
+                          </p>
+                          {msg.actions.map((action, i) => (
+                            <div
+                              key={i}
+                              className={cn(
+                                "flex items-center gap-2 px-2 py-1 rounded text-xs",
+                                action.result.success
+                                  ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400"
+                                  : "bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400"
+                              )}
+                            >
+                              {action.result.success ? (
+                                <CheckCircle className="w-3 h-3 flex-shrink-0" />
+                              ) : (
+                                <XCircle className="w-3 h-3 flex-shrink-0" />
+                              )}
+                              <span className="font-medium">{getToolLabel(action.tool)}</span>
+                              <span className="opacity-70">— {action.result.message ?? action.result.error}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
@@ -487,4 +527,30 @@ export function AiThinkerSection() {
       </Card>
     </div>
   );
+}
+
+// ============================================================
+// دالة مساعدة لعرض اسم الأداة بالعربية
+// ============================================================
+function getToolLabel(toolName: string): string {
+  const labels: Record<string, string> = {
+    search_cases: "بحث في القضايا",
+    get_case_details: "تفاصيل قضية",
+    create_case: "إنشاء قضية",
+    update_case: "تحديث قضية",
+    add_session: "تسجيل جلسة",
+    postpone_session: "تأجيل جلسة",
+    search_clients: "بحث في الموكلين",
+    get_client_details: "تفاصيل موكل",
+    create_client: "إنشاء موكل",
+    search_documents: "بحث في المستندات",
+    create_task: "إنشاء مهمة",
+    list_tasks: "عرض المهام",
+    list_appointments: "عرض المواعيد",
+    create_appointment: "إنشاء موعد",
+    get_finance_summary: "ملخص مالي",
+    get_overdue_payments: "مستحقات متأخرة",
+    get_stats: "إحصائيات",
+  };
+  return labels[toolName] ?? toolName;
 }

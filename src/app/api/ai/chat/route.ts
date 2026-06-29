@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callAiModel, LEGAL_THINKER_SYSTEM_PROMPT, type ChatMessage } from "@/lib/ai-client";
+import { runAgent, type AgentMessage } from "@/lib/ai-agent";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,34 +13,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // بناء رسائل النظام مع السياق
-    const systemContent = context
-      ? `${LEGAL_THINKER_SYSTEM_PROMPT}\n\nالسياق الحالي:\n${context}`
-      : LEGAL_THINKER_SYSTEM_PROMPT;
-
-    const fullMessages: ChatMessage[] = [
-      { role: "system", content: systemContent },
-      ...messages.map((m: { role: string; content: string }): ChatMessage => ({
+    // تحويل الرسائل لصيغة AgentMessage
+    const history: AgentMessage[] = messages
+      .filter((m: { role: string; content: string }) => m.role !== "system")
+      .map((m: { role: string; content: string }): AgentMessage => ({
         role: m.role === "assistant" ? "assistant" : "user",
         content: m.content,
-      })),
-    ];
+      }));
 
-    const result = await callAiModel(fullMessages, {
-      temperature: 0.7,
-      thinking: true,
-    });
+    // آخر رسالة هي رسالة المستخدم الحالية
+    const lastUserMessage = history.pop()?.content ?? "";
+
+    // تشغيل الوكيل
+    const result = await runAgent(lastUserMessage, history, context);
 
     return NextResponse.json({
       success: true,
       response: result.content,
-      usage: result.usage,
+      actions: result.actions,
     });
   } catch (error) {
-    console.error("AI chat error:", error);
+    console.error("AI agent chat error:", error);
     const message = error instanceof Error ? error.message : "خطأ غير معروف";
     return NextResponse.json(
-      { success: false, error: `حدث خطأ في الذكاء الاصطناعي: ${message}` },
+      { success: false, error: `حدث خطأ في الوكيل الذكي: ${message}` },
       { status: 500 }
     );
   }
