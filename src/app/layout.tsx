@@ -3,6 +3,7 @@ import { Cairo, Amiri } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Providers } from "@/components/providers";
+import { TelegramPoller } from "@/components/telegram-poller";
 
 const cairo = Cairo({
   variable: "--font-cairo",
@@ -36,7 +37,10 @@ export default function RootLayout({
       <body
         className={`${cairo.variable} ${amiri.variable} font-arabic antialiased`}
       >
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <TelegramPoller />
+        </Providers>
         <Toaster />
       </body>
     </html>
