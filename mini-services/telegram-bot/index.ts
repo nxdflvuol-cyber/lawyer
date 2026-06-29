@@ -243,26 +243,31 @@ async function handleTelegramUpdate(update: { message?: { chat: { id: number }; 
 
   const chatId = String(msg.chat.id);
   const text = msg.text.trim();
+  console.log(`📩 [${chatId}] ${text}`);
 
   // أمر التفويض
   if (text.startsWith("/start")) {
     const reply = `مرحباً بك في المساعد القانوني الذكي ⚖️
 
-أنا متصل بنظام "المحامي الشامل" الخاص بك.
-يمكنك سؤالي عن:
-• القضايا والموكلين
-• الجلسات والمواعيد
-• المهام والمستحقات
-• إحصائيات وملخصات
+━━━━━━━━━━━━━━━━━━━━
+📋 معرف الشات الخاص بك:
+━━━━━━━━━━━━━━━━━━━━
+  ${chatId}
+━━━━━━━━━━━━━━━━━━━━
 
-أمثلة:
-- "اعرض قضاياي النشطة"
-- "ما جلسات الغد؟"
-- "فيه مستحقات متأخرة؟"
-- "لخص قضية رقم 2024/001"
+📌 لتفعيل الوصول:
+1. افتح نظام "المحامي الشامل"
+2. اذهب للإعدادات ← تليجرام
+3. أضف هذا الرقم في "المعرفات المصرح لها":
+   ${chatId}
 
-معرف الشات الخاص بك: ${chatId}
-لتفعيل الوصول، أضف هذا المعرف من إعدادات النظام.`;
+✅ بعد الإضافة، اكتب أي سؤال وسأجيبك!
+
+💡 أمثلة:
+• "اعرض قضاياي النشطة"
+• "ما جلسات الغد؟"
+• "فيه مستحقات متأخرة؟"
+• "كم عدد الموكلين؟"`;
     await sendTelegramMessage(chatId, reply);
     return;
   }
@@ -324,16 +329,25 @@ async function handleTelegramUpdate(update: { message?: { chat: { id: number }; 
 
 async function sendTelegramMessage(chatId: string, text: string) {
   const token = await getBotToken();
-  if (!token) return;
+  if (!token) {
+    console.error("❌ لا يوجد توكن للبوت");
+    return;
+  }
   try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
+      body: JSON.stringify({ chat_id: chatId, text }),
       signal: AbortSignal.timeout(15000),
     });
+    const data = await res.json();
+    if (data.ok) {
+      console.log(`✅ تم إرسال رسالة إلى ${chatId}`);
+    } else {
+      console.error(`❌ فشل الإرسال إلى ${chatId}:`, data.description);
+    }
   } catch (error) {
-    console.error("Telegram send error:", error);
+    console.error("❌ Telegram send error:", error instanceof Error ? error.message : error);
   }
 }
 
