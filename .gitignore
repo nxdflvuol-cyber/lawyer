@@ -1,54 +1,90 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
 
-# dependencies
-node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+# Next.js
+.next/
+out/
+build/
+dist/
 
-# testing
-/coverage
+# Database (محلية - لا تُرفع)
+db/*.db
+db/*.db-journal
+db/*.db-wal
+db/*.db-shm
 
-# next.js
-/.next/
-/out/
+# Environment variables (حساسة)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
+# Logs
+*.log
+dev.log
+server.log
+telegram-bot.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# OS
+.DS_Store
+Thesarus.DS_Store
+*.swp
+*.swo
+*~
 
-# vercel
-.vercel
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
 
+# Misc
+.cache/
+coverage/
+*.pid
+*.seed
+*.pid.lock
 
-# typescript
-*.tsbuildinfo
+# Uploads (ملفات المستخدمين)
+upload/
+
+# Tool results
+tool-results/
+
+# Agent context
+agent-ctx/
+
+# Worklog (خاص بالتطوير)
+worklog.md
+
+# Start scripts
+start-all.sh
+run-bot.sh
+
+# Skills (ليست جزءاً من المشروع)
+skills/
+
+# Examples
+examples/
+
+# Download/Upload
+download/
+upload/
+
+# Tool results
+tool-results/
+
+# Agent context
+agent-ctx/
+
+# Next.js env
 next-env.d.ts
-local-*
-.claude
-.z-ai-config
-*.log
-dev.log
-dev.out.log
-test
-prompt
 
-server.log
-# Skills directory
-/skills/
+# Caddyfile (خاص بالبيئة)
+Caddyfile
