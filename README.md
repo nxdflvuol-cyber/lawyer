@@ -87,19 +87,26 @@ get_finance_summary | get_overdue_payments | get_stats
 
 ## 🚀 التثبيت السريع (5 دقائق)
 
+### ⚠️ مهم جداً قبل البدء:
+1. تأكد من تثبيت **Bun** من: https://bun.sh
+2. تأكد من وجود ملف `.env` في مجلد المشروع
+
 ### الطريقة 1: باستخدام Bun (موصى به)
 
 ```bash
 # 1. تثبيت الحزم
 bun install
 
-# 2. نسخ ملف البيئة
+# 2. نسخ ملف البيئة (إذا لم يكن موجوداً)
 cp .env.example .env
 
-# 3. تهيئة قاعدة البيانات
-bun run db:push
+# 3. إعداد قاعدة البيانات (مهم جداً!)
+bun run setup
 
-# 4. تشغيل النظام
+# 4. (اختياري) إضافة بيانات تجريبية
+bun run seed
+
+# 5. تشغيل النظام
 bun run dev
 ```
 
@@ -112,11 +119,37 @@ npm install
 # 2. نسخ ملف البيئة
 cp .env.example .env
 
-# 3. تهيئة قاعدة البيانات
+# 3. إعداد قاعدة البيانات (مهم جداً!)
+npx prisma generate
 npx prisma db push
 
-# 4. تشغيل النظام
+# 4. (اختياري) إضافة بيانات تجريبية
+npx prisma db seed
+
+# 5. تشغيل النظام
 npm run dev
+```
+
+### الطريقة 3: أمر واحد (setup + seed + dev)
+
+```bash
+bun install && cp .env.example .env && bun run setup && bun run seed && bun run dev
+```
+
+### على Windows (PowerShell):
+
+```powershell
+# 1. تثبيت الحزم
+bun install
+
+# 2. نسخ ملف البيئة
+Copy-Item .env.example .env
+
+# 3. إعداد قاعدة البيانات
+bun run setup
+
+# 4. تشغيل النظام
+bun run dev
 ```
 
 ### 3. أول تسجيل دخول
