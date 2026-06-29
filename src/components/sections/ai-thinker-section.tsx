@@ -185,6 +185,7 @@ export function AiThinkerSection() {
         body: JSON.stringify({
           messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
           context: caseContext,
+          sessionId: activeId, // معرف المحادثة الفريد للذاكرة
         }),
       });
 

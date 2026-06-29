@@ -4,7 +4,7 @@ import { runAgent, type AgentMessage } from "@/lib/ai-agent";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { messages, context } = body;
+    const { messages, context, sessionId } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -24,13 +24,19 @@ export async function POST(req: NextRequest) {
     // آخر رسالة هي رسالة المستخدم الحالية
     const lastUserMessage = history.pop()?.content ?? "";
 
-    // تشغيل الوكيل
-    const result = await runAgent(lastUserMessage, history, context);
+    // استخدام sessionId للمحافظة على سياق المحادثة
+    // إذا لم يُمرر sessionId، استخدم "default"
+    const session = sessionId || "default";
+
+    // تشغيل الوكيل مع sessionId للذاكرة
+    const result = await runAgent(lastUserMessage, history, context, session);
 
     return NextResponse.json({
       success: true,
       response: result.content,
       actions: result.actions,
+      needsConfirmation: result.needsConfirmation ?? false,
+      pendingAction: result.pendingAction,
     });
   } catch (error) {
     console.error("AI agent chat error:", error);

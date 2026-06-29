@@ -749,56 +749,16 @@ const SYSTEM_PROMPT = `أنت مساعد قانوني ذكي عبر تليجرا
 
 كن دقيقاً وموجزاً. استخدم Markdown الخفيف للتنظيم.`;
 
-async function runAgent(userMessage: string): Promise<string> {
-  const aiConfig = await getAiConfig();
-  if (!aiConfig.apiKey) return "⚠️ لم يتم تكوين الذكاء الاصطناعي. يرجى إضافته من الإعدادات.";
+// استيراد نظام الذاكرة من ai-agent
+import { quickAgentResponse } from "./ai-agent";
 
-  const messages: Array<Record<string, unknown>> = [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: userMessage },
-  ];
-
-  for (let i = 0; i < 5; i++) {
-    const response = await fetch(`${aiConfig.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${aiConfig.apiKey}` },
-      body: JSON.stringify({ model: aiConfig.model, messages, tools: TOOL_DEFINITIONS, tool_choice: "auto", temperature: 0.7 }),
-      signal: AbortSignal.timeout(90000),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      return `⚠️ خطأ في الذكاء الاصطناعي: ${response.status} - ${errText.slice(0, 100)}`;
-    }
-
-    const data = await response.json();
-    const msg = data.choices?.[0]?.message;
-
-    if (!msg?.tool_calls || msg.tool_calls.length === 0) {
-      return msg?.content ?? "لم أتمكن من الرد";
-    }
-
-    messages.push(msg);
-
-    for (const tc of msg.tool_calls) {
-      const toolName = tc.function.name;
-      let args: Record<string, unknown> = {};
-      try { args = JSON.parse(tc.function.arguments || "{}"); } catch {}
-      const handler = TOOL_HANDLERS[toolName];
-      const result = handler ? await handler(args) : { success: false, error: `أداة غير معروفة: ${toolName}` };
-      messages.push({ role: "tool", content: JSON.stringify(result), tool_call_id: tc.id, name: toolName });
-    }
-  }
-
-  // رد نهائي
-  const finalRes = await fetch(`${aiConfig.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${aiConfig.apiKey}` },
-    body: JSON.stringify({ model: aiConfig.model, messages, temperature: 0.7 }),
-    signal: AbortSignal.timeout(60000),
-  });
-  const finalData = await finalRes.json();
-  return finalData.choices?.[0]?.message?.content ?? "انتهت المعالجة";
+/**
+ * تشغيل الوكيل الذكي مع الذاكرة
+ * يستخدم chatId كـ sessionId للحفاظ على سياق المحادثة
+ */
+async function runAgent(userMessage: string, chatId?: string): Promise<string> {
+  const sessionId = chatId ? `telegram-${chatId}` : "telegram-default";
+  return await quickAgentResponse(userMessage, undefined, sessionId);
 }
 
 // ============================================================
@@ -1001,17 +961,17 @@ async function handleTelegramMessage(chatId: string, text: string) {
 
   // أوامر سريعة
   if (text === "/stats") {
-    const reply = await runAgent("أعطني إحصائيات عامة موجزة بالأرقام");
+    const reply = await runAgent("أعطني إحصائيات عامة موجزة بالأرقام", chatId);
     await sendTelegramMessage(chatId, reply);
     return;
   }
   if (text === "/appointments") {
-    const reply = await runAgent("ما مواعيد اليوم؟");
+    const reply = await runAgent("ما مواعيد اليوم؟", chatId);
     await sendTelegramMessage(chatId, reply);
     return;
   }
   if (text === "/tasks") {
-    const reply = await runAgent("اعرض المهام المعلقة");
+    const reply = await runAgent("اعرض المهام المعلقة", chatId);
     await sendTelegramMessage(chatId, reply);
     return;
   }
@@ -1033,7 +993,7 @@ async function handleTelegramMessage(chatId: string, text: string) {
   // معالجة بالـ AI
   await sendTelegramMessage(chatId, "⏳ جارٍ المعالجة...");
   try {
-    const reply = await runAgent(text);
+    const reply = await runAgent(text, chatId);
     await sendTelegramMessage(chatId, reply);
   } catch (error) {
     await sendTelegramMessage(chatId, `❌ خطأ: ${error instanceof Error ? error.message : "خطأ غير معروف"}`);
