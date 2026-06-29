@@ -23,7 +23,11 @@ export const metadata: Metadata = {
   keywords: ["محامي", "قانون", "قضايا", "محكمة", "ذكاء اصطناعي", "إدارة مكتب"],
   authors: [{ name: "المحامي الشامل" }],
   icons: {
-    icon: "/logo.svg",
+    icon: [
+      { url: "/logo.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/logo.svg",
+    apple: "/logo.svg",
   },
 };
 

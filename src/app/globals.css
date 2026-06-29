@@ -206,3 +206,20 @@ html[dir="rtl"] body {
 .dark .glass {
   background: oklch(0.2 0.02 165 / 0.7);
 }
+
+/* إخفاء مؤشر Next.js التطويري وشعار N */
+nextjs-portal,
+[data-nextjs-dialog-overlay],
+[data-nextjs-toast-wrapper],
+#nextjs__container,
+.nextjs-dev-indicator,
+button[aria-label*="Next.js"],
+button[aria-label*="Open Next.js"],
+div[class*="nextjs-dev"],
+div[class*="__next-build-watcher"],
+div[style*="position: fixed"][style*="bottom"][style*="right"][style*="z-index: 9999"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
