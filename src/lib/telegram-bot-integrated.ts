@@ -846,6 +846,73 @@ async function sendTelegramMessage(chatId: string, text: string): Promise<boolea
 // ============================================================
 
 async function handleTelegramMessage(chatId: string, text: string) {
+  // === معالجة تأكيد إضافة موكل من صورة ===
+  const pendingExtraction = pendingImageExtractions.get(chatId);
+  if (pendingExtraction) {
+    const confirmWords = ["نعم أضف", "نعم", "أضف", "أكّد", "اكد", "ايوة", "اه", "yes", "confirm"];
+    const cancelWords = ["لا", "إلغاء", "الغاء", "cancel", "no", "stop"];
+
+    if (confirmWords.some((w) => text.toLowerCase().includes(w.toLowerCase()))) {
+      // المستخدم أكّد - أنشئ الموكل
+      pendingImageExtractions.delete(chatId);
+      try {
+        const client = await db.client.create({
+          data: {
+            fullName: pendingExtraction.fullName || "اسم غير محدد",
+            phone: pendingExtraction.phone || null,
+            email: pendingExtraction.email || null,
+            idNumber: pendingExtraction.idNumber || null,
+            address: pendingExtraction.address || null,
+            city: pendingExtraction.city || null,
+            nationality: pendingExtraction.nationality || null,
+            clientType: "individual",
+            status: "active",
+          },
+        });
+
+        let msg = `✅ تم إنشاء الموكل بنجاح!\n\n`;
+        msg += `👤 الاسم: ${client.fullName}\n`;
+        msg += `🆔 المعرف: ${client.id}\n`;
+        if (client.phone) msg += `📞 الهاتف: ${client.phone}\n`;
+        if (client.idNumber) msg += `🆔 رقم الهوية: ${client.idNumber}\n`;
+
+        // إذا كان توكيل، أضفه
+        if (pendingExtraction.type === "power_of_attorney" && pendingExtraction.poaNumber) {
+          try {
+            const poa = await db.powerOfAttorney.create({
+              data: {
+                clientId: client.id,
+                poaNumber: pendingExtraction.poaNumber,
+                issuer: pendingExtraction.issuer || null,
+                poaType: pendingExtraction.poaType || "توكيل خاص",
+                scope: pendingExtraction.scope || null,
+                issueDate: pendingExtraction.issueDate ? new Date(pendingExtraction.issueDate) : new Date(),
+                expiryDate: pendingExtraction.expiryDate ? new Date(pendingExtraction.expiryDate) : null,
+                status: "active",
+              },
+            });
+            msg += `\n📝 تم تسجيل التوكيل رقم: ${poa.poaNumber}\n`;
+            if (poa.issuer) msg += `🏛️ جهة التوثيق: ${poa.issuer}\n`;
+          } catch {
+            msg += `\n⚠️ تعذر تسجيل التوكيل (قد يكون الرقم مكرراً)\n`;
+          }
+        }
+
+        msg += `\n✅ يمكنك الآن إنشاء قضايا لهذا الموكل.`;
+        await sendTelegramMessage(chatId, msg);
+      } catch (error) {
+        await sendTelegramMessage(chatId, `❌ خطأ في إنشاء الموكل: ${error instanceof Error ? error.message : "خطأ"}`);
+      }
+      return;
+    } else if (cancelWords.some((w) => text.toLowerCase().includes(w.toLowerCase()))) {
+      pendingImageExtractions.delete(chatId);
+      await sendTelegramMessage(chatId, "✅ تم إلغاء الإضافة.");
+      return;
+    }
+    // إذا كتب شيئاً آخر، اعتبره رسالة جديدة واحذف البيانات المعلقة
+    pendingImageExtractions.delete(chatId);
+  }
+
   // أمر /start
   if (text.startsWith("/start")) {
     const reply = `مرحباً بك في المساعد القانوني الذكي ⚖️
@@ -863,20 +930,28 @@ async function handleTelegramMessage(chatId: string, text: string) {
    ${chatId}
 
 ✅ بعد الإضافة، يمكنني:
-• إنشاء وتعديل وحذف الموكلين
-• إنشاء وإدارة القضايا
+• إنشاء وتعديل وحذف الموكلين والقضايا
 • تسجيل الجلسات وتأجيلها
 • إضافة المهام والمواعيد
 • تسجيل المدفوعات والمصروفات
 • البحث في كل البيانات
 • تقديم استشارات قانونية
 
+📸 رفع الصور:
+• ارفع صورة توكيل ← أستخرج البيانات وأضيف الموكل تلقائياً
+• ارفع صورة بطاقة هوية ← أستخرج البيانات
+• ارفع أي مستند ← أحفظه في النظام
+
+📎 رفع المستندات:
+• ارفع PDF أو Word ← أحفظه في أرشيف المستندات
+
 💡 أمثلة:
 • "أضف موكل جديد اسمه حسين شعبان"
 • "كم عدد القضايا؟"
 • "اعرض قضاياي النشطة"
 • "ما جلسات الغد؟"
-• "فيه مستحقات متأخرة؟"`;
+• "فيه مستحقات متأخرة؟"
+• [ارفع صورة توكيل وسأضيف الموكل تلقائياً]`;
     await sendTelegramMessage(chatId, reply);
     return;
   }
@@ -914,6 +989,11 @@ async function handleTelegramMessage(chatId: string, text: string) {
 💰 المالية:
 • "أعطني ملخص مالي"
 • "فيه مستحقات متأخرة؟"
+
+📸 رفع الصور والمستندات:
+• ارفع صورة توكيل ← أضيف الموكل تلقائياً
+• ارفع صورة بطاقة هوية ← أستخرج البيانات
+• ارفع PDF أو Word ← أحفظه في الأرشيف
 
 أو اكتب أي طلب بالعربية 🇪🇬`);
     return;
@@ -961,6 +1041,257 @@ async function handleTelegramMessage(chatId: string, text: string) {
 }
 
 // ============================================================
+// معالجة الصور - استخراج بيانات من صور التوكيلات
+// ============================================================
+
+async function handleTelegramPhoto(
+  chatId: string,
+  photo: Array<{ file_id: string; file_size: number; width: number; height: number }>,
+  botToken: string,
+  caption?: string
+) {
+  // التحقق من التفويض
+  const chatIds = await getAuthorizedChatIds();
+  if (!chatIds.includes(chatId)) {
+    await sendTelegramMessage(chatId, `🔒 غير مصرح\n\nمعرفك: ${chatId}\nأضفه من الإعدادات ← تليجرام`);
+    return;
+  }
+
+  await sendTelegramMessage(chatId, "📸 جارٍ معالجة الصورة واستخراج البيانات...");
+
+  try {
+    // اختيار أعلى جودة من الصور
+    const bestPhoto = photo[photo.length - 1];
+
+    // تحميل الصورة من تليجرام
+    const fileInfoRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${bestPhoto.file_id}`);
+    const fileInfo = await fileInfoRes.json();
+
+    if (!fileInfo.ok) {
+      await sendTelegramMessage(chatId, "❌ تعذر تحميل الصورة من تليجرام");
+      return;
+    }
+
+    const filePath = fileInfo.result.file_path;
+    const photoUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
+
+    // تنزيل الصورة كـ base64
+    const photoRes = await fetch(photoUrl);
+    const photoBuffer = await photoRes.arrayBuffer();
+    const photoBase64 = Buffer.from(photoBuffer).toString("base64");
+    const mimeType = "image/jpeg";
+    const dataUrl = `data:${mimeType};base64,${photoBase64}`;
+
+    // استخراج البيانات باستخدام VLM
+    const extractedData = await extractDataFromImage(dataUrl, caption);
+
+    if (!extractedData) {
+      await sendTelegramMessage(chatId, "❌ تعذر استخراج البيانات من الصورة. تأكد من وضوح الصورة وأنها تحتوي على بيانات واضحة.");
+      return;
+    }
+
+    // بناء رسالة النتائج
+    let resultMsg = "✅ تم استخراج البيانات من الصورة:\n\n";
+
+    // إذا كانت بيانات توكيل
+    if (extractedData.type === "power_of_attorney" || extractedData.type === "id_card") {
+      resultMsg += "📋 نوع المستند: " + (extractedData.type === "power_of_attorney" ? "توكيل" : "بطاقة هوية") + "\n\n";
+
+      // بيانات الموكل
+      if (extractedData.fullName) resultMsg += `👤 الاسم: ${extractedData.fullName}\n`;
+      if (extractedData.idNumber) resultMsg += `🆔 رقم الهوية: ${extractedData.idNumber}\n`;
+      if (extractedData.phone) resultMsg += `📞 الهاتف: ${extractedData.phone}\n`;
+      if (extractedData.address) resultMsg += `📍 العنوان: ${extractedData.address}\n`;
+      if (extractedData.nationality) resultMsg += `🌐 الجنسية: ${extractedData.nationality}\n`;
+
+      // بيانات التوكيل
+      if (extractedData.poaNumber) resultMsg += `\n📝 رقم التوكيل: ${extractedData.poaNumber}\n`;
+      if (extractedData.issuer) resultMsg += `🏛️ جهة التوثيق: ${extractedData.issuer}\n`;
+      if (extractedData.poaType) resultMsg += `📋 نوع التوكيل: ${extractedData.poaType}\n`;
+      if (extractedData.issueDate) resultMsg += `📅 تاريخ الإصدار: ${extractedData.issueDate}\n`;
+      if (extractedData.expiryDate) resultMsg += `⏰ تاريخ الانتهاء: ${extractedData.expiryDate}\n`;
+      if (extractedData.scope) resultMsg += `📌 النطاق: ${extractedData.scope}\n`;
+
+      // هل تريد الإضافة؟
+      resultMsg += "\n\nهل تريد إضافة هذا الموكل للنظام؟\n";
+      resultMsg += "أرسل: \"نعم أضف\" للتأكيد\n";
+      resultMsg += "أو: \"لا\" للإلغاء";
+
+      // حفظ البيانات المستخرجة مؤقتاً بانتظار التأكيد
+      pendingImageExtractions.set(chatId, extractedData);
+
+      await sendTelegramMessage(chatId, resultMsg);
+    } else {
+      // مستند آخر - اعرض النص المستخرج
+      resultMsg += "📄 النص المستخرج:\n\n";
+      resultMsg += extractedData.rawText?.slice(0, 3000) ?? "لا يوجد نص واضح";
+
+      await sendTelegramMessage(chatId, resultMsg);
+    }
+  } catch (error) {
+    console.error("Photo processing error:", error);
+    await sendTelegramMessage(chatId, `❌ خطأ في معالجة الصورة: ${error instanceof Error ? error.message : "خطأ غير معروف"}`);
+  }
+}
+
+// تخزين مؤقت للبيانات المستخرجة من الصور بانتظار تأكيد المستخدم
+const pendingImageExtractions = new Map<string, ExtractedDocumentData>();
+
+interface ExtractedDocumentData {
+  type: "power_of_attorney" | "id_card" | "contract" | "other";
+  fullName?: string;
+  idNumber?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  nationality?: string;
+  poaNumber?: string;
+  issuer?: string;
+  poaType?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  scope?: string;
+  rawText?: string;
+}
+
+/**
+ * استخراج البيانات من صورة باستخدام VLM
+ */
+async function extractDataFromImage(imageDataUrl: string, caption?: string): Promise<ExtractedDocumentData | null> {
+  const aiConfig = await getAiConfig();
+  if (!aiConfig.apiKey) return null;
+
+  const prompt = `حلل هذه الصورة بدقة واستخرج جميع البيانات القانونية منها.
+
+${caption ? `ملاحظة المستخدم: ${caption}` : ""}
+
+استخرج البيانات التالية (إذا وجدت) وأرجعها بصيغة JSON صحيحة فقط بدون أي نص إضافي:
+
+{
+  "type": "power_of_attorney أو id_card أو contract أو other",
+  "fullName": "الاسم الكامل",
+  "idNumber": "رقم الهوية أو الرقم القومي",
+  "phone": "رقم الهاتف إن وجد",
+  "email": "البريد الإلكتروني إن وجد",
+  "address": "العنوان",
+  "city": "المدينة",
+  "nationality": "الجنسية",
+  "poaNumber": "رقم التوكيل",
+  "issuer": "جهة التوثيق",
+  "poaType": "نوع التوكيل (خاص/عام)",
+  "issueDate": "تاريخ الإصدار بصيغة YYYY-MM-DD",
+  "expiryDate": "تاريخ الانتهاء بصيغة YYYY-MM-DD",
+  "scope": "نطاق الصلاحيات",
+  "rawText": "كل النص المرئي في الصورة"
+}
+
+إذا لم تجد قيمة معينة، اتركها فارغة ("").
+أرجع JSON فقط بدون أي شرح.`;
+
+  try {
+    const response = await fetch(`${aiConfig.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${aiConfig.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: aiConfig.model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: imageDataUrl } },
+            ],
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 2000,
+      }),
+      signal: AbortSignal.timeout(120000),
+    });
+
+    if (!response.ok) {
+      console.error("VLM API error:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content ?? "";
+
+    // استخراج JSON من الرد
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return { type: "other", rawText: content };
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    return parsed as ExtractedDocumentData;
+  } catch (error) {
+    console.error("VLM extraction error:", error);
+    return null;
+  }
+}
+
+/**
+ * معالجة المستندات (PDF / Word)
+ */
+async function handleTelegramDocument(
+  chatId: string,
+  document: { file_id: string; file_name: string; file_size?: number; mime_type?: string },
+  botToken: string,
+  caption?: string
+) {
+  // التحقق من التفويض
+  const chatIds = await getAuthorizedChatIds();
+  if (!chatIds.includes(chatId)) {
+    await sendTelegramMessage(chatId, `🔒 غير مصرح\n\nمعرفك: ${chatId}`);
+    return;
+  }
+
+  await sendTelegramMessage(chatId, `📎 جارٍ معالجة المستند: ${document.file_name}...`);
+
+  try {
+    // تحميل الملف
+    const fileInfoRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${document.file_id}`);
+    const fileInfo = await fileInfoRes.json();
+
+    if (!fileInfo.ok) {
+      await sendTelegramMessage(chatId, "❌ تعذر تحميل الملف");
+      return;
+    }
+
+    const filePath = fileInfo.result.file_path;
+    const fileUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
+    const fileRes = await fetch(fileUrl);
+    const fileBuffer = await fileRes.arrayBuffer();
+    const fileBase64 = Buffer.from(fileBuffer).toString("base64");
+
+    // تخزين المستند في قاعدة البيانات
+    const doc = await db.document.create({
+      data: {
+        title: caption || document.file_name,
+        description: `مستند مرفوع عبر تليجرام`,
+        docType: document.mime_type?.includes("pdf") ? "pdf" : document.mime_type?.includes("word") ? "word" : "other",
+        category: "other",
+        fileName: document.file_name,
+        fileSize: document.file_size ?? fileBuffer.byteLength,
+        mimeType: document.mime_type ?? "application/octet-stream",
+        fileData: `data:${document.mime_type ?? "application/octet-stream"};base64,${fileBase64}`,
+        tags: "تليجرام",
+      },
+    });
+
+    await sendTelegramMessage(chatId, `✅ تم حفظ المستند "${document.file_name}" في النظام\n\n📊 يمكنك ربطه بقضية أو موكل من داخل النظام.`);
+  } catch (error) {
+    console.error("Document processing error:", error);
+    await sendTelegramMessage(chatId, `❌ خطأ في معالجة المستند: ${error instanceof Error ? error.message : "خطأ غير معروف"}`);
+  }
+}
+
+// ============================================================
 // Polling - يعمل في الخلفية داخل خادم Next.js
 // ============================================================
 
@@ -971,7 +1302,6 @@ async function startTelegramPolling() {
   if (pollingActive) return;
   pollingActive = true;
   console.log("🔄 Starting Telegram polling...");
-
   async function poll() {
     if (!pollingActive) return;
 
@@ -990,12 +1320,27 @@ async function startTelegramPolling() {
       if (data.ok && data.result.length > 0) {
         for (const update of data.result) {
           lastUpdateId = update.update_id;
-          if (update.message?.text && update.message.chat?.id) {
-            const chatId = String(update.message.chat.id);
-            const text = update.message.text;
-            console.log(`📩 [${chatId}] ${text}`);
-            // معالجة الرسالة (لا ننتظرها)
-            handleTelegramMessage(chatId, text).catch(console.error);
+
+          if (!update.message?.chat?.id) continue;
+          const chatId = String(update.message.chat.id);
+          const msg = update.message;
+
+          // === معالجة الرسائل النصية ===
+          if (msg.text) {
+            console.log(`📩 [${chatId}] ${msg.text}`);
+            handleTelegramMessage(chatId, msg.text).catch(console.error);
+          }
+
+          // === معالجة الصور (التوكيلات / المستندات) ===
+          else if (msg.photo && msg.photo.length > 0) {
+            console.log(`📸 [${chatId}] صورة مستلمة`);
+            handleTelegramPhoto(chatId, msg.photo, token, msg.caption).catch(console.error);
+          }
+
+          // === معالجة المستندات (PDF / Word) ===
+          else if (msg.document) {
+            console.log(`📎 [${chatId}] مستند مستلم: ${msg.document.file_name}`);
+            handleTelegramDocument(chatId, msg.document, token, msg.caption).catch(console.error);
           }
         }
       }
