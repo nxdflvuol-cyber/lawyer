@@ -1,6 +1,7 @@
 // ============================================================
 // المحامي الشامل - Telegram Bot
 // مساعد قانوني عبر تليجرام يستخدم AI Agent
+// يقرأ الإعدادات من قاعدة البيانات (وليس من env فقط)
 // ============================================================
 
 import { PrismaClient } from "@prisma/client";
@@ -8,15 +9,23 @@ import { PrismaClient } from "@prisma/client";
 const db = new PrismaClient();
 const PORT = 3004;
 
-// إعدادات من متغيرات البيئة
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? "";
-const AI_BASE_URL = process.env.AI_PROVIDER_BASE_URL ?? "https://api.freemodel.dev/v1";
-const AI_API_KEY = process.env.AI_PROVIDER_API_KEY ?? "";
-const AI_MODEL = process.env.AI_PROVIDER_MODEL ?? "gpt-5.5";
+// إعدادات افتراضية من env (كاحتياط)
+const DEFAULT_AI_BASE_URL = process.env.AI_PROVIDER_BASE_URL ?? "https://api.freemodel.dev/v1";
+const DEFAULT_AI_API_KEY = process.env.AI_PROVIDER_API_KEY ?? "";
+const DEFAULT_AI_MODEL = process.env.AI_PROVIDER_MODEL ?? "gpt-5.5";
 
 // ============================================================
-// تخزين معرفات تليجرام المصرح بها (في قاعدة البيانات)
+// قراءة الإعدادات من قاعدة البيانات
 // ============================================================
+
+async function getBotToken(): Promise<string> {
+  try {
+    const setting = await db.setting.findUnique({ where: { id: "telegram_bot_token" } });
+    return setting?.value || process.env.TELEGRAM_BOT_TOKEN || "";
+  } catch {
+    return process.env.TELEGRAM_BOT_TOKEN || "";
+  }
+}
 
 async function getAuthorizedChatIds(): Promise<string[]> {
   try {
@@ -28,15 +37,20 @@ async function getAuthorizedChatIds(): Promise<string[]> {
   }
 }
 
-async function addAuthorizedChatId(chatId: string): Promise<void> {
-  const ids = await getAuthorizedChatIds();
-  if (!ids.includes(chatId)) {
-    ids.push(chatId);
-    await db.setting.upsert({
-      where: { id: "telegram_chat_ids" },
-      update: { value: JSON.stringify(ids) },
-      create: { id: "telegram_chat_ids", value: JSON.stringify(ids) },
-    });
+async function getAiConfig() {
+  try {
+    const [baseUrl, apiKey, model] = await Promise.all([
+      db.setting.findUnique({ where: { id: "ai_base_url" } }),
+      db.setting.findUnique({ where: { id: "ai_api_key" } }),
+      db.setting.findUnique({ where: { id: "ai_model" } }),
+    ]);
+    return {
+      baseUrl: baseUrl?.value || DEFAULT_AI_BASE_URL,
+      apiKey: apiKey?.value || DEFAULT_AI_API_KEY,
+      model: model?.value || DEFAULT_AI_MODEL,
+    };
+  } catch {
+    return { baseUrl: DEFAULT_AI_BASE_URL, apiKey: DEFAULT_AI_API_KEY, model: DEFAULT_AI_MODEL };
   }
 }
 
@@ -169,21 +183,23 @@ const SYSTEM_PROMPT = `أنت مساعد قانوني ذكي عبر تليجرا
 عند عرض المواعيد، اذكر: التاريخ، الوقت، العنوان، المكان.`;
 
 async function runAgent(userMessage: string): Promise<string> {
+  const aiConfig = await getAiConfig();
+  if (!aiConfig.apiKey) return "⚠️ لم يتم تكوين الذكاء الاصطناعي";
+
   const messages: Array<Record<string, unknown>> = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: userMessage },
   ];
 
   for (let i = 0; i < 4; i++) {
-    const response = await fetch(`${AI_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
+    const response = await fetch(`${aiConfig.baseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${AI_API_KEY}` },
-      body: JSON.stringify({ model: AI_MODEL, messages, tools: TOOL_DEFINITIONS, tool_choice: "auto", temperature: 0.7 }),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${aiConfig.apiKey}` },
+      body: JSON.stringify({ model: aiConfig.model, messages, tools: TOOL_DEFINITIONS, tool_choice: "auto", temperature: 0.7 }),
       signal: AbortSignal.timeout(90000),
     });
 
     if (!response.ok) {
-      const errText = await response.text();
       return `⚠️ خطأ في الذكاء الاصطناعي: ${response.status}`;
     }
 
@@ -207,10 +223,10 @@ async function runAgent(userMessage: string): Promise<string> {
   }
 
   // رد نهائي
-  const finalRes = await fetch(`${AI_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
+  const finalRes = await fetch(`${aiConfig.baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${AI_API_KEY}` },
-    body: JSON.stringify({ model: AI_MODEL, messages, temperature: 0.7 }),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${aiConfig.apiKey}` },
+    body: JSON.stringify({ model: aiConfig.model, messages, temperature: 0.7 }),
     signal: AbortSignal.timeout(60000),
   });
   const finalData = await finalRes.json();
@@ -243,9 +259,9 @@ async function handleTelegramUpdate(update: { message?: { chat: { id: number }; 
 - "اعرض قضاياي النشطة"
 - "ما جلسات الغد؟"
 - "فيه مستحقات متأخرة؟"
-- "لخص قضية رقم 2024/123"
+- "لخص قضية رقم 2024/001"
 
-${chatId}
+معرف الشات الخاص بك: ${chatId}
 لتفعيل الوصول، أضف هذا المعرف من إعدادات النظام.`;
     await sendTelegramMessage(chatId, reply);
     return;
@@ -307,9 +323,10 @@ ${chatId}
 }
 
 async function sendTelegramMessage(chatId: string, text: string) {
-  if (!TELEGRAM_BOT_TOKEN) return;
+  const token = await getBotToken();
+  if (!token) return;
   try {
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
@@ -321,7 +338,7 @@ async function sendTelegramMessage(chatId: string, text: string) {
 }
 
 // ============================================================
-// تشغيل الخادم (Polling mode)
+// تشغيل الخادم
 // ============================================================
 
 const server = Bun.serve({
@@ -329,24 +346,78 @@ const server = Bun.serve({
   async fetch(req) {
     const url = new URL(req.url);
 
+    // Health check
+    if (url.pathname === "/health") {
+      const token = await getBotToken();
+      const chatIds = await getAuthorizedChatIds();
+      const aiConfig = await getAiConfig();
+      return new Response(JSON.stringify({
+        status: "ok",
+        bot: token ? "configured" : "not configured",
+        botTokenPreview: token ? token.slice(0, 10) + "..." : "",
+        ai: aiConfig.apiKey ? "configured" : "not configured",
+        authorizedChatIds: chatIds,
+        port: PORT,
+      }), { headers: { "Content-Type": "application/json" } });
+    }
+
+    // Webhook endpoint
     if (url.pathname === "/webhook" && req.method === "POST") {
       const update = await req.json();
       handleTelegramUpdate(update);
       return new Response("ok");
     }
 
-    if (url.pathname === "/health") {
-      return new Response(JSON.stringify({
-        status: "ok",
-        bot: TELEGRAM_BOT_TOKEN ? "configured" : "not configured",
-        ai: AI_API_KEY ? "configured" : "not configured",
-        port: PORT,
-      }), { headers: { "Content-Type": "application/json" } });
+    // Send test message
+    if (url.pathname === "/send-test" && req.method === "POST") {
+      try {
+        const chatIds = await getAuthorizedChatIds();
+        const token = await getBotToken();
+        if (!token) {
+          return new Response(JSON.stringify({ success: false, error: "لم يتم تكوين رمز البوت" }), { headers: { "Content-Type": "application/json" } });
+        }
+        if (chatIds.length === 0) {
+          return new Response(JSON.stringify({ success: false, error: "لا توجد معرفات مصرح لها" }), { headers: { "Content-Type": "application/json" } });
+        }
+
+        let sent = 0;
+        let errors = 0;
+        for (const chatId of chatIds) {
+          try {
+            const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: chatId,
+                text: "✅ رسالة تجريبية من نظام المحامي الشامل\n\nالبوت يعمل بنجاح! ⚖️",
+              }),
+              signal: AbortSignal.timeout(15000),
+            });
+            if (res.ok) sent++;
+            else errors++;
+          } catch {
+            errors++;
+          }
+        }
+
+        return new Response(JSON.stringify({
+          success: sent > 0,
+          message: `تم إرسال ${sent} رسالة بنجاح${errors > 0 ? `، فشل ${errors}` : ""}`,
+          sent,
+          errors,
+        }), { headers: { "Content-Type": "application/json" } });
+      } catch (error) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: error instanceof Error ? error.message : "خطأ غير معروف",
+        }), { headers: { "Content-Type": "application/json" } });
+      }
     }
 
-    if (url.pathname === "/poll" && req.method === "POST") {
-      // بدء الـ polling يدوياً
-      return new Response(JSON.stringify({ status: "polling started" }));
+    // Reload bot (عند تحديث الإعدادات)
+    if (url.pathname === "/reload" && req.method === "POST") {
+      // الـ polling سيقرأ الإعدادات الجديدة تلقائياً في الدورة القادمة
+      return new Response(JSON.stringify({ success: true, message: "تم إعادة التحميل" }), { headers: { "Content-Type": "application/json" } });
     }
 
     return new Response("المحامي الشامل - Telegram Bot", { status: 200 });
@@ -354,19 +425,29 @@ const server = Bun.serve({
 });
 
 console.log(`🤖 Telegram Bot running on port ${PORT}`);
-console.log(`📡 Webhook URL: http://localhost:${PORT}/webhook`);
-console.log(`❤️ Health: http://localhost:${PORT}/health`);
+console.log(`📡 Health: http://localhost:${PORT}/health`);
+console.log(`📤 Test: http://localhost:${PORT}/send-test`);
 
 // ============================================================
-// وضع الـ Polling التلقائي
+// وضع الـ Polling التلقائي - يقرأ التوكن من DB في كل دورة
 // ============================================================
 
 let lastUpdateId = 0;
+let currentToken = "";
 
 async function pollUpdates() {
-  if (!TELEGRAM_BOT_TOKEN) return;
+  const token = await getBotToken();
+  if (!token) return;
+
+  // إذا تغير التوكن، أعد التعيين
+  if (token !== currentToken) {
+    currentToken = token;
+    lastUpdateId = 0; // إعادة تعيين للتوكن الجديد
+    console.log(`🔄 Bot token updated: ${token.slice(0, 15)}...`);
+  }
+
   try {
-    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`, {
+    const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`, {
       signal: AbortSignal.timeout(35000),
     });
     const data = await res.json();
@@ -374,6 +455,7 @@ async function pollUpdates() {
       for (const update of data.result) {
         lastUpdateId = update.update_id;
         if (update.message) {
+          console.log(`📩 Received message from chat ${update.message.chat.id}: ${update.message.text?.slice(0, 50)}`);
           handleTelegramUpdate(update);
         }
       }
@@ -383,11 +465,7 @@ async function pollUpdates() {
   }
 }
 
-// ابدأ الـ polling كل 5 ثوانٍ
-if (TELEGRAM_BOT_TOKEN) {
-  console.log("🔄 Starting polling mode...");
-  setInterval(pollUpdates, 5000);
-} else {
-  console.log("⚠️ TELEGRAM_BOT_TOKEN not set - polling disabled");
-  console.log("   Set it in .env: TELEGRAM_BOT_TOKEN=your_bot_token");
-}
+// ابدأ الـ polling كل 3 ثوانٍ
+console.log("🔄 Starting polling mode...");
+setInterval(pollUpdates, 3000);
+pollUpdates(); // تشغيل فوري
