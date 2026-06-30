@@ -762,16 +762,17 @@ const SYSTEM_PROMPT = `أنت مساعد قانوني ذكي عبر تليجرا
 
 كن دقيقاً وموجزاً. استخدم Markdown الخفيف للتنظيم.`;
 
-// استيراد نظام الذاكرة من ai-agent
-import { quickAgentResponse } from "./ai-agent";
+// استيراد الـ Legal Agent الجديد
+import { runLegalAgent } from "./ai-legal-agent";
 
 /**
- * تشغيل الوكيل الذكي مع الذاكرة
+ * تشغيل الوكيل القانوني الذكي
  * يستخدم chatId كـ sessionId للحفاظ على سياق المحادثة
  */
 async function runAgent(userMessage: string, chatId?: string): Promise<string> {
   const sessionId = chatId ? `telegram-${chatId}` : "telegram-default";
-  return await quickAgentResponse(userMessage, undefined, sessionId);
+  const result = await runLegalAgent(userMessage, sessionId);
+  return result.answer;
 }
 
 // ============================================================

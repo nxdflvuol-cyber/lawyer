@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runAgent, type AgentMessage } from "@/lib/ai-agent";
+import { runLegalAgent } from "@/lib/ai-legal-agent";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { messages, context, sessionId } = body;
+    const { messages, sessionId } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -13,36 +13,40 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // تحويل الرسائل لصيغة AgentMessage
-    const history: AgentMessage[] = messages
-      .filter((m: { role: string; content: string }) => m.role !== "system")
-      .map((m: { role: string; content: string }): AgentMessage => ({
-        role: m.role === "assistant" ? "assistant" : "user",
-        content: m.content,
-      }));
+    // استخراج آخر رسالة من المستخدم
+    const lastUserMessage = messages
+      .filter((m: { role: string }) => m.role === "user")
+      .pop()?.content ?? "";
 
-    // آخر رسالة هي رسالة المستخدم الحالية
-    const lastUserMessage = history.pop()?.content ?? "";
+    if (!lastUserMessage) {
+      return NextResponse.json(
+        { success: false, error: "لا توجد رسالة" },
+        { status: 400 }
+      );
+    }
 
     // استخدام sessionId للمحافظة على سياق المحادثة
-    // إذا لم يُمرر sessionId، استخدم "default"
     const session = sessionId || "default";
 
-    // تشغيل الوكيل مع sessionId للذاكرة
-    const result = await runAgent(lastUserMessage, history, context, session);
+    // تشغيل الـ Legal Agent
+    const result = await runLegalAgent(lastUserMessage, session);
 
     return NextResponse.json({
       success: true,
-      response: result.content,
+      response: result.answer,
       actions: result.actions,
-      needsConfirmation: result.needsConfirmation ?? false,
-      pendingAction: result.pendingAction,
+      confidence: result.confidence,
+      task_type: result.task_type,
+      intent: result.intent,
+      steps_executed: result.steps_executed,
+      tools_used: result.tools_used,
+      missing_info: result.missing_info,
     });
   } catch (error) {
-    console.error("AI agent chat error:", error);
+    console.error("Legal Agent error:", error);
     const message = error instanceof Error ? error.message : "خطأ غير معروف";
     return NextResponse.json(
-      { success: false, error: `حدث خطأ في الوكيل الذكي: ${message}` },
+      { success: false, error: `حدث خطأ: ${message}` },
       { status: 500 }
     );
   }
