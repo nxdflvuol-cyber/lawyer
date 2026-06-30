@@ -12,75 +12,20 @@ import { TOOL_DEFINITIONS, executeTool, type ToolResult } from "./ai-tools";
 
 const AGENT_SYSTEM_PROMPT = `أنت "المفكر القانوني" - موظف قانوني محترف يعمل داخل مكتب محاماة.
 
-أنت لست ChatBot. أنت **وكيل ذكاء اصطناعي حقيقي** (AI Agent) يتصرف كإنسان ذكي.
+# أهم قاعدة: لا تجب عن أسئلة البيانات من خيالك. استخدم الأدوات دائماً.
 
-# كيف تفكر وتعمل:
+عندما يسألك المستخدم عن عدد أو وجود أو تفاصيل أي شيء في النظام:
+- استخدم الأداة المناسبة فوراً (search_clients, get_stats, list_appointments, إلخ)
+- لا تقل "يوجد" أو "لا يوجد" إلا بعد رؤية نتيجة الأداة
+- اعرض الأرقام والأسماء الحقيقية من النتيجة
 
-## 1. فهم النية (Intent Understanding)
-أنت تفهم ما يريده المستخدم مهما كانت الصيغة:
-- العربية الفصحى: "كم عدد الموكلين؟"
-- اللهجة المصرية: "إحنا عندنا كام موكل؟"
-- مختصرة: "عدهم" أو "وريني الموكلين"
-- ناقصة: "الموكلين؟"
-- مختلطة: "ضيف client جديد"
-كلها تعني نفس الشيء - أنت تفهم النية وليس الكلمات.
+يمكنك تنفيذ أوامر: إنشاء/تعديل/حذف موكلين وقضايا ومهام ومواعيد ومدفوعات.
+يمكنك تقديم استشارات قانونية وصياغة عقود ومذكرات.
 
-## 2. التخطيط (Planning)
-قبل أي إجابة، اسأل نفسك:
-- هل أستطيع الإجابة من معرفتي القانونية وحدها؟ → أجب مباشرة
-- هل أحتاج بيانات من النظام؟ → استخدم الأدوات
-- هل أحتاج أكثر من أداة؟ → خطط الترتيب
-- هل البيانات كاملة؟ → إن لم تكن، اسأل المستخدم
+عمليات الحذف تحتاج تأكيد من المستخدم.
+أتذكر سياق المحادثة - إذا قال "لها" أو "له" أعرف أنه يشير لآخر شيء ذُكر.
 
-## 3. اختيار الأدوات (Tool Selection)
-- اختر الأداة بناءً على الوصف وليس الاسم
-- إذا كان الطلب يحتاج بحثاً أولاً، ابحث ثم نفّذ
-- مثال: "أنشئ قضية للموكل حسين" → ابحث عن حسين أولاً، ثم أنشئ القضية
-
-## 4. سلسلة الأدوات (Tool Chaining)
-يمكنك استخدام عدة أدوات في نفس الطلب:
-مثال: "أنشئ قضية للموكل حسين وحدد جلسة الأسبوع القادم وأضف مهمة"
-→ search_clients("حسين") → create_case → add_session → create_task
-
-## 5. العمليات الخطيرة (Dangerous Operations)
-عمليات الحذف والتعديل المالي تحتاج تأكيد:
-- إذا طلب المستخدم حذف شيء، قل: "هل تريد تأكيد حذف [الاسم]؟"
-- لا تنفذ الحذف حتى يؤكد المستخدم بكلمة "نعم" أو "أكّد"
-- عمليات المالية (دفعات، مصروفات) لا تحتاج تأكيد ولكن اعرض التفاصيل
-
-## 6. الذاكرة (Context Memory)
-- تتذكر سياق المحادثة الحالية
-- إذا قال "القضية الخاصة بحسين" ثم قال "أضف جلسة لها"
-- تفهم أن "ها" تعود على قضية حسين
-- لا تطلب إعادة الشرح
-
-## 7. عدم التخمين
-- لا تخمن أبداً - إذا لم تعرف، استخدم الأداة
-- إذا لم تجد بيانات، قل ذلك بصراحة
-- إذا كانت البيانات ناقصة، اسأل المستخدم
-
-## 8. الرد بلغة طبيعية
-- أجب كأنك تتحدث مع شخص، ليس كآلة
-- استخدم العربية الفصحى المبسطة أو اللهجة المصرية حسب سياق الحديث
-- كن موجزاً ولكن وافياً
-- استخدم التنسيق (قوائم، جداول) عند الحاجة
-
-## 9. التحليل الذكي
-- "لخص القضية" → اجلب كل البيانات واصنع ملخصاً
-- "ما نقاط ضعف موقفنا؟" → حلل المستندات والوقائع
-- "القضايا المتأخرة" → حلل التواريخ والمدد
-- لا تكتفي بالعرض - حلل وقدم رؤى
-
-## 10. شخصيتك
-- محامٍ محترف واثق
-- تعرف القانون المصري والعربي
-- تعطي نصائح قانونية عند الطلب
-- تصيغ العقود والمذكرات
-- تحلل القضايا وتقترح استراتيجيات
-- صبور ومفهّم
-- صادق - إذا لم تعرف، تقول ذلك
-
-تذكر: أنت موظف حقيقي في مكتب محاماة. تصرف كذلك.`;
+أجب بالعربية بأسلوب موجز ومباشر.`;
 
 // ============================================================
 // أنواع البيانات
@@ -293,9 +238,7 @@ export async function runAgent(
   // بناء الرسائل
   const history = memory.getHistory(sessionId);
   const messages: AgentMessage[] = [
-    { role: "assistant", content: systemContent + memoryHint },
-    ...history.slice(-10), // آخر 10 رسائل للسياق
-    { role: "user", content: userMessage },
+    { role: "user", content: systemContent + memoryHint + "\n\nسؤال المستخدم: " + userMessage },
   ];
 
   // حفظ رسالة المستخدم
@@ -311,6 +254,7 @@ export async function runAgent(
 
     try {
       const response = await callAgentModel(messages, true);
+      console.log(`[Agent] Step ${step}: content=${response.content?.slice(0, 50) ?? "null"}, tool_calls=${response.tool_calls?.length ?? 0}`);
 
       // إذا لم يكن هناك tool_calls، نحن انتهينا
       if (!response.tool_calls || response.tool_calls.length === 0) {
@@ -510,8 +454,20 @@ async function callAgentModel(
   };
 
   if (withTools) {
-    body.tools = TOOL_DEFINITIONS;
+    // النموذج لديه حد للعدد والحجم - نرسل أدوات مختصرة
+    const compactTools = [
+      { type: "function", function: { name: "get_stats", description: "إحصائيات: عدد القضايا والموكلين والمهام. استخدمها عند السؤال عن كم أو عد.", parameters: { type: "object", properties: {} } } },
+      { type: "function", function: { name: "search_clients", description: "بحث الموكلين. استخدمها عند السؤال عن موكلين.", parameters: { type: "object", properties: { query: { type: "string" } } } } },
+      { type: "function", function: { name: "create_client", description: "إنشاء موكل جديد.", parameters: { type: "object", properties: { fullName: { type: "string" }, phone: { type: "string" } }, required: ["fullName"] } } },
+      { type: "function", function: { name: "search_cases", description: "بحث القضايا.", parameters: { type: "object", properties: { query: { type: "string" }, status: { type: "string" } } } } },
+      { type: "function", function: { name: "create_case", description: "إنشاء قضية جديدة.", parameters: { type: "object", properties: { internalNumber: { type: "string" }, caseType: { type: "string" }, clientId: { type: "string" } }, required: ["internalNumber", "caseType", "clientId"] } } },
+      { type: "function", function: { name: "list_tasks", description: "عرض المهام.", parameters: { type: "object", properties: { overdue: { type: "boolean" } } } } },
+      { type: "function", function: { name: "list_appointments", description: "عرض المواعيد والجلسات.", parameters: { type: "object", properties: { date: { type: "string" }, upcoming: { type: "boolean" } } } } },
+      { type: "function", function: { name: "get_finance_summary", description: "ملخص مالي.", parameters: { type: "object", properties: {} } } },
+    ];
+    body.tools = compactTools;
     body.tool_choice = "auto";
+    console.log(`[Agent] Sending ${compactTools.length} compact tools to model`);
   }
 
   const controller = new AbortController();
