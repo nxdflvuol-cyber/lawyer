@@ -163,13 +163,20 @@ async function getCaseDetails(args: { caseId: string }): Promise<ToolResult> {
 
 async function createCase(args: {
   internalNumber: string;
+  officialNumber?: string;
   caseType: string;
   clientId: string;
   opponentName?: string;
+  opponentLawyer?: string;
   court?: string;
+  circuit?: string;
   facts?: string;
+  strategy?: string;
+  estimatedValue?: number;
   degree?: string;
   year?: number;
+  priority?: string;
+  notes?: string;
 }): Promise<ToolResult> {
   // التحقق من وجود الموكل
   const client = await db.client.findUnique({ where: { id: args.clientId } });
@@ -178,13 +185,20 @@ async function createCase(args: {
   const newCase = await db.case.create({
     data: {
       internalNumber: args.internalNumber,
+      officialNumber: args.officialNumber ?? null,
       caseType: args.caseType,
       clientId: args.clientId,
       opponentName: args.opponentName ?? null,
+      opponentLawyer: args.opponentLawyer ?? null,
       court: args.court ?? null,
+      circuit: args.circuit ?? null,
       facts: args.facts ?? null,
+      strategy: args.strategy ?? null,
+      estimatedValue: args.estimatedValue ?? null,
       degree: args.degree ?? "primary",
       year: args.year ?? new Date().getFullYear(),
+      priority: args.priority ?? "medium",
+      notes: args.notes ?? null,
       startDate: new Date(),
     },
     include: { client: true },

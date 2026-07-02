@@ -1349,7 +1349,7 @@ function CaseDetailSheet({
                     <ProceduresTab caseId={caseData.id} procedures={caseData.procedures ?? []} />
                   </TabsContent>
                   <TabsContent value="documents" className="mt-0">
-                    <DocumentsTab caseId={caseData.id} documents={caseData.documents ?? []} />
+                    <DocumentsTab caseId={caseData.id} documents={(caseData.documentLinks ?? []).map((l: any) => l.document).filter(Boolean)} />
                   </TabsContent>
                   <TabsContent value="tasks" className="mt-0">
                     <TasksTab caseId={caseData.id} tasks={caseData.tasks ?? []} />
@@ -3424,7 +3424,7 @@ function TimelineTab({ caseData }: { caseData: CaseItem }) {
         color: "bg-red-500 text-white",
       });
     });
-    (caseData.documents ?? []).forEach((d) => {
+    ((caseData.documentLinks ?? []).map((l: any) => l.document).filter(Boolean)).forEach((d) => {
       evs.push({
         date: d.createdAt,
         title: `مستند: ${d.title}`,

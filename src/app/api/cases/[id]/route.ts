@@ -13,12 +13,13 @@ export async function GET(
         client: true,
         sessions: { orderBy: { sessionDate: "desc" } },
         procedures: { orderBy: { date: "desc" } },
-        documents: { orderBy: { createdAt: "desc" } },
+        documentLinks: { include: { document: true }, orderBy: { createdAt: "desc" } },
         tasks: { orderBy: { dueDate: "asc" } },
         appointments: { orderBy: { startDate: "asc" } },
         fees: { orderBy: { createdAt: "desc" } },
         expenses: { orderBy: { expenseDate: "desc" } },
         evidences: true,
+        opponents: true,
       },
     });
 

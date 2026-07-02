@@ -270,6 +270,13 @@ async function createPlan(
 - لا تجعل أي خطوة "required" إلا إذا كان المستخدم طلبها فعلاً.
 - الخطة المثالية = أصغر مجموعة خطوات لتنفيذ طلب المستخدم حرفياً.
 
+⚠️ مهم - الطلبات المتعددة في رسالة واحدة:
+- إذا ذكر المستخدم عدة عناصر من نفس النوع، أضف خطوة لكل عنصر.
+- مثال: "ضيف موكل + قضية + جلسة + موعد" → 4 خطوات: create_client, create_case, add_session, create_appointment.
+- مثال: "قضية أولى + قضية تانية" → خطوتا create_case منفصلتان.
+- مثال: "ضيف موكل. عنده قضية رقم 11. جلسة 11/07. موعد 13/07" → create_client + create_case + add_session + create_appointment.
+- كل خطوة في الخطة بشارة "need" وصفتها.
+
 رسالة المستخدم: "${userMessage}"`;
 
   try {
@@ -421,13 +428,27 @@ async function executePlan(
     let lastClientId = memory.get(sessionId).lastClientId ?? "";
     let lastCaseId = memory.get(sessionId).lastCaseId ?? "";
 
+    // مؤشرات لتتبع أي عنصر في المصفوفة نستخدمه لكل نوع
+    // (يدعم عدة عناصر من نفس النوع، مثلاً قضيتان)
+    const arrayIndexByNeed: Record<string, number> = {};
+
     // نفّذ كل خطوات create بالتسلسل
     for (const step of createSteps) {
       const mapping = mapNeedToTool(step.need);
       if (!mapping) continue;
 
       // خذ البيانات المستخرجة لهذه الخطوة
-      const args: Record<string, unknown> = { ...(allData[step.need] || {}) };
+      // قد تكون كائناً واحداً أو مصفوفة (للعناصر المتعددة)
+      const raw = allData[step.need];
+      let stepData: Record<string, unknown> | undefined;
+      if (Array.isArray(raw)) {
+        const idx = arrayIndexByNeed[step.need] ?? 0;
+        stepData = raw[idx];
+        arrayIndexByNeed[step.need] = idx + 1;
+      } else if (raw && typeof raw === "object") {
+        stepData = raw as Record<string, unknown>;
+      }
+      const args: Record<string, unknown> = { ...(stepData || {}) };
 
       // حقن المعرفات من الإجراءات السابقة في السلسلة
       if ((step.need === "create_case" || step.need === "create_appointment" ||
@@ -438,15 +459,25 @@ async function executePlan(
         args.caseId = lastCaseId;
       }
 
-      // إذا كانت البيانات الأساسية مفقودة، تخطّى الخطوة
+      // إذا كانت البيانات الأساسية مفقودة، تخطّى الخطوة بصمت
+      // (لا نسجلها كفشل لأن المستخدم لم يقدم بيانات كافية أصلاً)
       if (step.need === "create_client" && !args.fullName) continue;
-      if (step.need === "create_case" && (!args.internalNumber || !args.clientId)) {
-        // لا يمكن إنشاء قضية بدون رقم داخلي أو موكل
-        executed.push({ need: step.need, tool: mapping.tool, success: false, result: { success: false, error: "بيانات ناقصة لإنشاء القضية" } });
-        continue;
+      if (step.need === "create_case") {
+        if (!args.internalNumber || !args.clientId || !args.caseType) {
+          // تخطّي إنشاء قضية بدون بيانات أساسية
+          continue;
+        }
       }
       if (step.need === "add_session" && (!args.caseId || !args.sessionDate)) {
-        executed.push({ need: step.need, tool: mapping.tool, success: false, result: { success: false, error: "بيانات ناقصة لإضافة الجلسة" } });
+        continue;
+      }
+      if (step.need === "create_task" && !args.title) {
+        continue;
+      }
+      if (step.need === "create_appointment" && !args.startDate) {
+        continue;
+      }
+      if (step.need === "create_payment" && (!args.amount || !args.clientId)) {
         continue;
       }
 
@@ -546,10 +577,10 @@ async function extractAllCreateDataFromMessage(
   message: string,
   createNeeds: string[],
   sessionId: string
-): Promise<Record<string, Record<string, unknown>>> {
+): Promise<Record<string, Record<string, unknown> | Array<Record<string, unknown>>>> {
   const ctx = memory.get(sessionId);
 
-  const needsList = createNeeds.map(n => {
+  const needsList = createNeeds.map((n, i) => {
     const labels: Record<string, string> = {
       create_client: "موكل جديد",
       create_case: "قضية جديدة",
@@ -559,12 +590,12 @@ async function extractAllCreateDataFromMessage(
       create_payment: "دفعة مالية",
       create_power_of_attorney: "توكيل",
     };
-    return `- ${n}: ${labels[n] ?? n}`;
+    return `${i + 1}. ${n}: ${labels[n] ?? n}`;
   }).join("\n");
 
   const extractPrompt = `استخرج كل البيانات من رسالة المستخدم لإنشاء عدة عناصر.
 
-العناصر المطلوب إنشاؤها:
+العناصر المطلوب إنشاؤها (بهذا الترتيب):
 ${needsList}
 
 ⚠️ قواعد صارمة:
@@ -574,44 +605,51 @@ ${needsList}
 
 قواعد الاستخراج المهمة:
 - أرقام القضايا: استخرج الرقم والسنة معاً كما وردت.
-  مثال: "قضية رقمها 11 لسنة 2025" → {"internalNumber": "11 لسنة 2025"}
+  مثال: "قضية رقمها 11 لسنة 2025" → {"officialNumber": "11 لسنة 2025"}
   مثال: "قضية رقم 2024/001" → {"internalNumber": "2024/001"}
-  مثال: "12 لسنة 2026 جنح سمالوط شرق" → {"internalNumber": "12 لسنة 2026", "court": "سمالوط شرق"}
+  مثال: "قيدت برقم داخلي 12 لسنة 2026" → {"internalNumber": "12 لسنة 2026"}
 - نوع القضية (caseType) من النص:
   • "إداري" أو "اداري" → "administrative"
   • "جنح" أو "جنائية" → "criminal"
   • "مدني" → "civil"
   • "تجاري" → "commercial"
   • "أحوال شخصية" → "personal_status"
-- المحكمة (court): استخرج اسم المحكمة كاملاً. مثال: "اداري غرب سمالوط" → "محكمة غرب سمالوط الإدارية"
-- التواريخ: حوّل لصيغة ISO. "11/07/2026" → "2026-07-11T09:00:00". "اليوم" → تاريخ اليوم ${new Date().toISOString().slice(0,10)}T09:00:00.
-- "إنذار" → create_appointment بعنوان "إنذار" و eventType "deadline".
-- "قضية تانية" أو "الثانية" بدون تفاصيل → {"internalNumber": "TBD"}.
+- المحكمة (court): استخرج اسم المحكمة. مثال: "اداري غرب سمالوط" → "محكمة غرب سمالوط الإدارية"
+- officialNumber = الرقم الرسمي للقضية (مثل "11 لسنة 2025")
+- internalNumber = الرقم الداخلي (مثل "12 لسنة 2026") — مطلوب دائماً
+- إذا ذُكر رقم رسمي ورقم داخلي: officialNumber = الرسمي، internalNumber = الداخلي
+- التواريخ: حوّل لصيغة ISO. "11/07/2026" → "2026-07-11T09:00:00". "اليوم" → "${new Date().toISOString().slice(0,10)}T09:00:00".
+- "إنذار" → create_appointment: {"title": "إنذار", "eventType": "deadline", "startDate": "..."}
+- "قضية تانية" أو "الثانية" بدون تفاصيل → {"internalNumber": "TBD-2"}.
+
+⚠️ مهم جداً - العناصر المتعددة من نفس النوع:
+- إذا كان هناك قضيتان، استخدم مصفوفة: "create_case": [{...القضية الأولى...}, {...القضية الثانية...}]
+- رتب العناصر بنفس ترتيب ذكرها في رسالة المستخدم.
 
 السياق: ${ctx.lastClientId ? `آخر موكل=${ctx.lastClientId}` : "لا يوجد موكل سابق"}
 ${ctx.lastCaseId ? `آخر قضية=${ctx.lastCaseId}` : ""}
 
 رسالة المستخدم: "${message}"
 
-أرجع JSON فقط بهذا الشكل (كل مفتاح هو نوع الإنشاء، والقيمة هي بياناته):
+أرجع JSON فقط. كل مفتاح هو نوع الإنشاء، والقيمة إما كائن واحد أو مصفوفة كائنات:
 {
-  "create_client": {"fullName": "...", "phone": "..."},
-  "create_case": {"internalNumber": "...", "caseType": "civil", "court": "...", "officialNumber": "..."},
+  "create_client": {"fullName": "..."},
+  "create_case": [{"internalNumber": "...", "officialNumber": "...", "caseType": "administrative", "court": "..."}],
   "add_session": {"sessionDate": "2026-07-11T09:00:00"},
-  "create_appointment": {"title": "...", "startDate": "2026-07-13T09:00:00", "eventType": "deadline"}
+  "create_appointment": {"title": "إنذار", "startDate": "2026-07-13T09:00:00", "eventType": "deadline"}
 }`;
 
   try {
     const result = await callAiModel(
       [{ role: "user", content: extractPrompt }],
-      { temperature: 0.1, maxTokens: 1000 }
+      { temperature: 0.1, maxTokens: 1200 }
     );
 
     const jsonMatch = result.content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return {};
 
     const parsed = JSON.parse(jsonMatch[0]);
-    return parsed as Record<string, Record<string, unknown>>;
+    return parsed as Record<string, Record<string, unknown> | Array<Record<string, unknown>>>;
   } catch {
     return {};
   }
