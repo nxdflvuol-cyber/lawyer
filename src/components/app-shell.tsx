@@ -428,6 +428,8 @@ function renderSection(section: string) {
       return <ClientsSectionLazy />;
     case "documents":
       return <DocumentsSectionLazy />;
+    case "legal-brain":
+      return <LegalBrainSectionLazy />;
     case "tasks":
       return <TasksSectionLazy />;
     case "appointments":
@@ -476,6 +478,7 @@ const CasesSectionLazy = dynamic(() => import("@/components/sections/cases-secti
 const PreCasesSectionLazy = dynamic(() => import("@/components/sections/precases-section").then(m => ({ default: m.PreCaseSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const ClientsSectionLazy = dynamic(() => import("@/components/sections/clients-section").then(m => ({ default: m.ClientsSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const DocumentsSectionLazy = dynamic(() => import("@/components/sections/documents-section").then(m => ({ default: m.DocumentsSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const LegalBrainSectionLazy = dynamic(() => import("@/components/sections/legal-brain-section").then(m => ({ default: m.LegalBrainSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const TasksSectionLazy = dynamic(() => import("@/components/sections/tasks-section").then(m => ({ default: m.TasksSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const AppointmentsSectionLazy = dynamic(() => import("@/components/sections/appointments-section").then(m => ({ default: m.AppointmentsSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const FinanceSectionLazy = dynamic(() => import("@/components/sections/finance-section").then(m => ({ default: m.FinanceSection })), { loading: () => <SectionSkeleton />, ssr: false });

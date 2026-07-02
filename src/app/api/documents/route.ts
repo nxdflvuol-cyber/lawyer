@@ -18,15 +18,25 @@ export async function GET(req: NextRequest) {
       ];
     }
     if (category) where.category = category;
-    if (caseId) where.caseId = caseId;
-    if (clientId) where.clientId = clientId;
+
+    // فلترة عبر DocumentLink
+    if (caseId || clientId) {
+      const linkFilter: Record<string, string> = {};
+      if (caseId) linkFilter.caseId = caseId;
+      if (clientId) linkFilter.clientId = clientId;
+      where.documentLinks = { some: linkFilter };
+    }
 
     const documents = await db.document.findMany({
       where,
       orderBy: { createdAt: "desc" },
       include: {
-        case: { select: { id: true, internalNumber: true } },
-        client: { select: { id: true, fullName: true } },
+        documentLinks: {
+          include: {
+            case: { select: { id: true, internalNumber: true } },
+            client: { select: { id: true, fullName: true } },
+          },
+        },
       },
     });
 
@@ -46,6 +56,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    // إنشاء المستند + روابطه عبر DocumentLink
+    const linkData: Record<string, string> = {};
+    if (body.caseId) linkData.caseId = body.caseId;
+    if (body.clientId) linkData.clientId = body.clientId;
+
     const document = await db.document.create({
       data: {
         title: body.title,
@@ -58,10 +73,11 @@ export async function POST(req: NextRequest) {
         fileData: body.fileData ?? null,
         textContent: body.textContent ?? null,
         tags: body.tags,
-        folder: body.folder,
-        caseId: body.caseId || null,
-        clientId: body.clientId || null,
+        documentLinks: Object.keys(linkData).length
+          ? { create: [linkData] }
+          : undefined,
       },
+      include: { documentLinks: true },
     });
     return NextResponse.json({ success: true, document });
   } catch (error) {

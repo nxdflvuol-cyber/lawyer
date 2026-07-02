@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
         client: true,
         sessions: { orderBy: { sessionDate: "desc" }, take: 1 },
         _count: {
-          select: { sessions: true, documents: true, tasks: true, procedures: true },
+          select: { sessions: true, documentLinks: true, tasks: true, procedures: true },
         },
       },
     });

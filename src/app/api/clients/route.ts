@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       orderBy: { updatedAt: "desc" },
       include: {
         _count: {
-          select: { cases: true, documents: true, payments: true },
+          select: { cases: true, documentLinks: true, payments: true },
         },
       },
     });

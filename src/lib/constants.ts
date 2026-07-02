@@ -76,6 +76,13 @@ export const SECTIONS: SectionDef[] = [
     description: "إدارة وأرشفة المستندات المتقدمة",
   },
   {
+    id: "legal-brain",
+    label: "العقل القانوني",
+    icon: Brain,
+    group: "ai",
+    description: "عقل قانوني بـ 12 مرحلة و33 وكيل متخصص",
+  },
+  {
     id: "tasks",
     label: "المهام",
     icon: CheckSquare,

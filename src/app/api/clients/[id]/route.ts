@@ -12,9 +12,9 @@ export async function GET(
       include: {
         cases: {
           orderBy: { updatedAt: "desc" },
-          include: { _count: { select: { sessions: true, documents: true } } },
+          include: { _count: { select: { sessions: true, documentLinks: true } } },
         },
-        documents: { orderBy: { createdAt: "desc" } },
+        documentLinks: { include: { document: true }, orderBy: { createdAt: "desc" } },
         communications: { orderBy: { createdAt: "desc" } },
         payments: { orderBy: { paymentDate: "desc" } },
         powers: true,

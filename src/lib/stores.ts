@@ -56,6 +56,7 @@ export type SectionId =
   | "precases"
   | "clients"
   | "documents"
+  | "legal-brain"
   | "tasks"
   | "appointments"
   | "finance"

@@ -44,7 +44,7 @@ async function casesReport(range: DateRange, caseType?: string | null, status?: 
     db.case.findMany({
       where,
       orderBy: { startDate: "desc" },
-      include: { client: true, _count: { select: { sessions: true, documents: true, tasks: true } } },
+      include: { client: true, _count: { select: { sessions: true, documentLinks: true, tasks: true } } },
       take: 500,
     }),
     db.case.groupBy({ by: ["caseType"], where, _count: true }),
@@ -178,7 +178,7 @@ async function clientsReport(range: DateRange, clientType?: string | null, statu
     db.client.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      include: { _count: { select: { cases: true, documents: true, payments: true } } },
+      include: { _count: { select: { cases: true, documentLinks: true, payments: true } } },
       take: 500,
     }),
     db.client.groupBy({ by: ["clientType"], where, _count: true }),
