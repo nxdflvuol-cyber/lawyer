@@ -26,6 +26,7 @@ import {
   UserCog,
   BookOpen,
   LogOut,
+  FileCheck,
   type LucideIcon,
 } from "lucide-react";
 import type { SectionId } from "./stores";
@@ -52,6 +53,13 @@ export const SECTIONS: SectionDef[] = [
     icon: Briefcase,
     group: "main",
     description: "إدارة شاملة لكافة أنواع القضايا",
+  },
+  {
+    id: "precases",
+    label: "إجراءات ما قبل الدعوى",
+    icon: FileCheck,
+    group: "main",
+    description: "ملفات قانونية قيد التجهيز قبل رفع الدعوى",
   },
   {
     id: "clients",

@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Providers } from "@/components/providers";
 import { TelegramPoller } from "@/components/telegram-poller";
+import { CommandPalette } from "@/components/command-palette";
 
 const cairo = Cairo({
   variable: "--font-cairo",
@@ -44,6 +45,7 @@ export default function RootLayout({
         <Providers>
           {children}
           <TelegramPoller />
+          <CommandPalette />
         </Providers>
         <Toaster />
       </body>

@@ -53,6 +53,7 @@ export const useAuthStore = create<AuthState>()(
 export type SectionId =
   | "dashboard"
   | "cases"
+  | "precases"
   | "clients"
   | "documents"
   | "tasks"

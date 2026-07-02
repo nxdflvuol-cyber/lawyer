@@ -45,6 +45,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Record<SectionId, AccessLevel
   admin: {
     dashboard: "full",
     cases: "full",
+    precases: "full",
     clients: "full",
     documents: "full",
     tasks: "full",
@@ -70,6 +71,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Record<SectionId, AccessLevel
   lawyer: {
     dashboard: "full",
     cases: "full",
+    precases: "full",
     clients: "full",
     documents: "full",
     tasks: "full",
@@ -95,6 +97,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Record<SectionId, AccessLevel
   assistant: {
     dashboard: "full",
     cases: "full",
+    precases: "full",
     clients: "full",
     documents: "full",
     tasks: "full",
@@ -120,6 +123,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Record<SectionId, AccessLevel
   member: {
     dashboard: "view",
     cases: "view",
+    precases: "view",
     clients: "view",
     documents: "view",
     tasks: "full",
@@ -145,6 +149,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Record<SectionId, AccessLevel
   intern: {
     dashboard: "view",
     cases: "view",
+    precases: "view",
     clients: "view",
     documents: "view",
     tasks: "view",

@@ -422,6 +422,8 @@ function renderSection(section: string) {
       return <DashboardSectionLazy />;
     case "cases":
       return <CasesSectionLazy />;
+    case "precases":
+      return <PreCasesSectionLazy />;
     case "clients":
       return <ClientsSectionLazy />;
     case "documents":
@@ -471,6 +473,7 @@ function renderSection(section: string) {
 import dynamic from "next/dynamic";
 const DashboardSectionLazy = dynamic(() => import("@/components/sections/dashboard-section").then(m => ({ default: m.DashboardSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const CasesSectionLazy = dynamic(() => import("@/components/sections/cases-section").then(m => ({ default: m.CasesSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const PreCasesSectionLazy = dynamic(() => import("@/components/sections/precases-section").then(m => ({ default: m.PreCaseSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const ClientsSectionLazy = dynamic(() => import("@/components/sections/clients-section").then(m => ({ default: m.ClientsSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const DocumentsSectionLazy = dynamic(() => import("@/components/sections/documents-section").then(m => ({ default: m.DocumentsSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const TasksSectionLazy = dynamic(() => import("@/components/sections/tasks-section").then(m => ({ default: m.TasksSection })), { loading: () => <SectionSkeleton />, ssr: false });
