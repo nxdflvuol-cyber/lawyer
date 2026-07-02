@@ -260,6 +260,16 @@ async function createPlan(
 - legal_analysis: تحليل قانوني
 - draft_document: صياغة مستند
 
+⚠️ قاعدة ذهبية حرجة - اقرأ بعناية:
+- ضع في الخطة فقط ما طلبه المستخدم صراحةً في رسالته.
+- لا تتخيل خطوات لم يطلبها. لا تضف create_case أو add_session أو create_appointment إلا إذا ذكرها المستخدم نصاً.
+- مثال: "ضيف موكل" → خطوة واحدة فقط: create_client. لا تضف قضية أو جلسة أو موعد.
+- مثال: "ضيف قضية" → create_case فقط (مع جلب الموكل إن ذُكر).
+- مثال: "اعرض قضايا أحمد" → search_clients ثم search_cases فقط.
+- إذا لم تكن متأكداً أن المستخدم يريد إجراءً معيناً، لا تضعه في الخطة.
+- لا تجعل أي خطوة "required" إلا إذا كان المستخدم طلبها فعلاً.
+- الخطة المثالية = أصغر مجموعة خطوات لتنفيذ طلب المستخدم حرفياً.
+
 رسالة المستخدم: "${userMessage}"`;
 
   try {
@@ -480,19 +490,24 @@ async function extractDataFromMessage(
 
   const extractPrompt = `استخرج البيانات من رسالة المستخدم لإنشاء ${toolName}.
 
-أرجع JSON فقط بالبيانات المستخرجة. إذا لم تجد قيمة، اتركها فارغة.
+⚠️ قاعدة حرجة:
+- استخرج فقط البيانات المذكورة صراحةً في رسالة المستخدم.
+- لا تخمن أي قيمة. لا تختلق أرقام قضايا أو تواريخ أو أسماء لم يذكرها المستخدم.
+- إذا لم تجد قيمة لحقل ما، اتركه فارغاً أو احذفه. لا تضع قيماً افتراضية من خيالك.
+- مثال: إذا قال المستخدم "ضيف موكل مصطفى بكري" → فقط {"fullName": "مصطفى بكري"}. لا تخمن هاتف أو بريد أو رقم قضية.
 
 السياق: ${ctx.lastClientId ? `آخر موكل=${ctx.lastClientId}` : "لا يوجد"}
 ${ctx.lastCaseId ? `آخر قضية=${ctx.lastCaseId}` : ""}
 
 رسالة المستخدم: "${message}"
 
-مثال لـ create_client: {"fullName": "الاسم", "phone": "الهاتف", "email": "البريد"}
-مثال لـ create_case: {"internalNumber": "2024/001", "caseType": "civil", "clientId": "معرف الموكل", "opponentName": "الخصم"}
-مثال لـ create_task: {"title": "عنوان المهمة", "priority": "medium"}
-مثال لـ create_appointment: {"title": "العنوان", "startDate": "2024-07-15T10:00:00"}
-مثال لـ add_session: {"caseId": "معرف القضية", "sessionDate": "2024-07-15T10:00:00"}
-مثال لـ create_payment: {"clientId": "معرف الموكل", "amount": 5000}`;
+أرجع JSON فقط بالبيانات المستخرجة الفعلية من الرسالة:
+- create_client: {"fullName": "...", "phone": "...", "email": "..."} (فقط ما ذُكر)
+- create_case: {"internalNumber": "...", "caseType": "...", "clientId": "..."} (فقط ما ذُكر)
+- create_task: {"title": "...", "priority": "..."}
+- create_appointment: {"title": "...", "startDate": "..."}
+- add_session: {"caseId": "...", "sessionDate": "..."}
+- create_payment: {"clientId": "...", "amount": ...}`;
 
   try {
     const result = await callAiModel(
@@ -570,6 +585,29 @@ async function verifyResults(
 
   const requiredSteps = plan.steps.filter(s => s.priority === "required");
   const executedNeeds = executed.map(e => e.need);
+  const executedSuccessful = executed.filter(e => e.success);
+
+  // إذا نجح إجراء إنشاء/تعديل (create/update) - نعتبر المهمة مكتملة
+  // ولا نبلّغ عن نواقص من خطوات متخيلة لم يطلبها المستخدم
+  const hasSuccessfulAction = executedSuccessful.some(e =>
+    ["create_client", "create_case", "create_task", "create_appointment",
+     "add_session", "create_payment", "create_expense", "create_power_of_attorney",
+     "update_client", "update_case", "update_task"].includes(e.need)
+  );
+
+  if (hasSuccessfulAction && routerResult.action === "create") {
+    // تم تنفيذ الإجراء المطلوب بنجاح - لا نواقص
+    return {
+      sufficient: true,
+      confidence: 0.9,
+      missing: [],
+      has_data: true,
+      has_legal_context: routerResult.requires_legal_kb,
+    };
+  }
+
+  // حساب النواقص فقط للخطوات المطلوبة التي لم تُنفذ
+  // لكن فقط إذا لم يكن هناك أي نجاح في الإجراءات
   const missing = requiredSteps
     .filter(s => !executedNeeds.includes(s.need))
     .map(s => s.need);
@@ -627,7 +665,19 @@ async function generateAnswer(
   // بناء البرومبت حسب نوع المهمة
   let systemRole = "أنت محامٍ محترف يعمل في مكتب محاماة.";
 
-  if (routerResult.task_type === "hybrid") {
+  // إذا كان إجراء إنشاء ناجح - رد موجز بدون نواقص
+  const successfulAction = executed.find(e =>
+    e.success && [
+      "create_client", "create_case", "create_task", "create_appointment",
+      "add_session", "create_payment", "create_expense", "create_power_of_attorney",
+    ].includes(e.need)
+  );
+  if (successfulAction && routerResult.action === "create") {
+    systemRole += `\nتم تنفيذ الإجراء المطلوب بنجاح.
+أبلغ المستخدم بالنتيجة بشكل موجز ومباشر.
+لا تذكر أي نواقص. لا تقترح إجراءات إضافية لم يطلبها المستخدم.
+لا تقل "يجب إنشاء قضية" أو "يجب إضافة جلسة" - فقط أكّد ما تم.`;
+  } else if (routerResult.task_type === "hybrid") {
     systemRole += `\nالمهمة تحتاج تحليلاً هجيناً: ادمج بيانات النظام مع معرفتك القانونية.
 حلل الموقف القانوني بناءً على البيانات المتاحة.
 إذا كانت البيانات ناقصة، اذكر ما ينقص صراحة.
@@ -647,7 +697,8 @@ async function generateAnswer(
     systemRole += `\n\n# سياق المحادثة السابقة:\n${conversationContext}`;
   }
 
-  if (verification.missing.length > 0) {
+  // فقط اذكر النواقص إذا لم يكن هناك إجراء ناجح
+  if (verification.missing.length > 0 && !successfulAction) {
     systemRole += `\n\n⚠️ معلومات ناقصة: ${verification.missing.join(", ")}\nاذكر هذه النواقص في إجابتك.`;
   }
 
