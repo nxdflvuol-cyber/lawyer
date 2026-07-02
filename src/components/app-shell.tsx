@@ -430,6 +430,20 @@ function renderSection(section: string) {
       return <DocumentsSectionLazy />;
     case "legal-brain":
       return <LegalBrainSectionLazy />;
+    case "legal-workspace":
+      return <LegalWorkspaceSectionLazy />;
+    case "template-studio":
+      return <TemplateStudioSectionLazy />;
+    case "reporting-bi":
+      return <ReportingBISectionLazy />;
+    case "integration-hub":
+      return <IntegrationHubSectionLazy />;
+    case "workflow-designer":
+      return <WorkflowDesignerSectionLazy />;
+    case "automation-builder":
+      return <AutomationBuilderSectionLazy />;
+    case "digital-twin":
+      return <DigitalTwinSectionLazy />;
     case "tasks":
       return <TasksSectionLazy />;
     case "appointments":
@@ -479,6 +493,13 @@ const PreCasesSectionLazy = dynamic(() => import("@/components/sections/precases
 const ClientsSectionLazy = dynamic(() => import("@/components/sections/clients-section").then(m => ({ default: m.ClientsSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const DocumentsSectionLazy = dynamic(() => import("@/components/sections/documents-section").then(m => ({ default: m.DocumentsSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const LegalBrainSectionLazy = dynamic(() => import("@/components/sections/legal-brain-section").then(m => ({ default: m.LegalBrainSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const LegalWorkspaceSectionLazy = dynamic(() => import("@/components/sections/legal-workspace-section").then(m => ({ default: m.LegalWorkspaceSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const TemplateStudioSectionLazy = dynamic(() => import("@/components/sections/template-studio-section").then(m => ({ default: m.TemplateStudioSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const ReportingBISectionLazy = dynamic(() => import("@/components/sections/reporting-bi-section").then(m => ({ default: m.ReportingBISection })), { loading: () => <SectionSkeleton />, ssr: false });
+const IntegrationHubSectionLazy = dynamic(() => import("@/components/sections/integration-hub-section").then(m => ({ default: m.IntegrationHubSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const WorkflowDesignerSectionLazy = dynamic(() => import("@/components/sections/workflow-designer-section").then(m => ({ default: m.WorkflowDesignerSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const AutomationBuilderSectionLazy = dynamic(() => import("@/components/sections/automation-builder-section").then(m => ({ default: m.AutomationBuilderSection })), { loading: () => <SectionSkeleton />, ssr: false });
+const DigitalTwinSectionLazy = dynamic(() => import("@/components/sections/digital-twin-section").then(m => ({ default: m.DigitalTwinSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const TasksSectionLazy = dynamic(() => import("@/components/sections/tasks-section").then(m => ({ default: m.TasksSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const AppointmentsSectionLazy = dynamic(() => import("@/components/sections/appointments-section").then(m => ({ default: m.AppointmentsSection })), { loading: () => <SectionSkeleton />, ssr: false });
 const FinanceSectionLazy = dynamic(() => import("@/components/sections/finance-section").then(m => ({ default: m.FinanceSection })), { loading: () => <SectionSkeleton />, ssr: false });

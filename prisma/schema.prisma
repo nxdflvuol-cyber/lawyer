@@ -114,6 +114,12 @@ model Client {
   opponents       Opponent[]
   contracts       Contract[]
   properties      Property[]
+
+  @@index([fullName])
+  @@index([phone])
+  @@index([idNumber])
+  @@index([status])
+  @@index([isArchived])
 }
 
 model PowerOfAttorney {
@@ -139,6 +145,10 @@ model PowerOfAttorney {
 
   documentLinks  DocumentLink[]
   timelineEvents TimelineEvent[]
+
+  @@index([clientId])
+  @@index([poaNumber])
+  @@index([status])
 }
 
 model Communication {
@@ -335,6 +345,15 @@ model Case {
   timelineEvents    TimelineEvent[]
   checklistItems    ChecklistItem[]
   adjournments      String?
+
+  @@index([internalNumber])
+  @@index([officialNumber])
+  @@index([clientId])
+  @@index([status])
+  @@index([caseType])
+  @@index([court])
+  @@index([isArchived])
+  @@index([preCaseId])
 }
 
 model CaseSession {
@@ -425,6 +444,12 @@ model Document {
   // روابط متعددة - لا تكرار للملف
   documentLinks   DocumentLink[]
   timelineEvents  TimelineEvent[]
+
+  @@index([title])
+  @@index([category])
+  @@index([fileHash])
+  @@index([ocrStatus])
+  @@index([isArchived])
 }
 
 // ============================================================

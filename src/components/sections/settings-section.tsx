@@ -46,6 +46,7 @@ import {
   Power,
   Send,
   MessageCircle,
+  ToggleRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
@@ -114,6 +115,10 @@ export function SettingsSection() {
           <TabsTrigger value="telegram" className="flex items-center gap-1">
             <MessageCircle className="w-3.5 h-3.5" />
             تليجرام
+          </TabsTrigger>
+          <TabsTrigger value="features" className="flex items-center gap-1">
+            <ToggleRight className="w-3.5 h-3.5" />
+            الميزات
           </TabsTrigger>
         </TabsList>
 
@@ -406,8 +411,79 @@ export function SettingsSection() {
         <TabsContent value="telegram" className="space-y-4">
           <TelegramSettingsCard />
         </TabsContent>
+
+        {/* الميزات (Feature Flags) */}
+        <TabsContent value="features" className="space-y-4">
+          <FeatureFlagsCard />
+        </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// ============================================================
+// بطاقة Feature Flags - تفعيل/إيقاف الميزات
+// ============================================================
+function FeatureFlagsCard() {
+  const [flags, setFlags] = useState<Array<{ id: string; label: string; description: string; enabled: boolean; isOverride: boolean }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/feature-flags?role=admin");
+        const data = await res.json();
+        if (!cancelled && data.success) setFlags(data.flags);
+      } catch {}
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function toggleFlag(id: string, enabled: boolean) {
+    setFlags((prev) => prev.map((f) => f.id === id ? { ...f, enabled: !enabled, isOverride: true } : f));
+    try {
+      await fetch("/api/feature-flags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: "admin", flagId: id, enabled: !enabled }),
+      });
+    } catch {}
+  }
+
+  if (loading) {
+    return <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <ToggleRight className="w-5 h-5 text-primary" />
+          إدارة الميزات (Feature Flags)
+        </CardTitle>
+        <CardDescription>
+          تفعيل أو إيقاف أي ميزة في النظام دون تعديل الكود. الإعدادات تنطبق على دور المدير.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {flags.map((flag) => (
+          <div key={flag.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">{flag.label}</span>
+                {flag.isOverride && (
+                  <Badge variant="secondary" className="text-[10px]">مخصص</Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">{flag.description}</p>
+            </div>
+            <Switch checked={flag.enabled} onCheckedChange={() => toggleFlag(flag.id, flag.enabled)} />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -103,6 +103,9 @@ import {
   Eye,
   Target,
   Info,
+  FileCheck,
+  Loader2,
+  CheckCircle2,
 } from "lucide-react";
 
 // ============================================================
@@ -403,10 +406,18 @@ export function CasesSection() {
             متابعة شاملة لجميع قضايا المكتب مع التفاصيل والإجراءات
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" onClick={() => setSection("clients")}>
             <Users className="w-4 h-4 ml-2" />
             الموكلون
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setSection("precases")}
+            className="border-primary/40 text-primary hover:bg-primary/10"
+          >
+            <FileCheck className="w-4 h-4 ml-2" />
+            إجراءات ما قبل رفع الدعوى
           </Button>
           <Button onClick={() => setShowCreate(true)}>
             <Plus className="w-4 h-4 ml-2" />
@@ -1313,6 +1324,10 @@ function CaseDetailSheet({
                     <History className="w-3.5 h-3.5" />
                     التسلسل الزمني
                   </TabsTrigger>
+                  <TabsTrigger value="precase" className="gap-1">
+                    <FileCheck className="w-3.5 h-3.5" />
+                    إجراءات ما قبل رفع الدعوى
+                  </TabsTrigger>
                 </TabsList>
               </div>
 
@@ -1344,6 +1359,9 @@ function CaseDetailSheet({
                   </TabsContent>
                   <TabsContent value="timeline" className="mt-0">
                     <TimelineTab caseData={caseData} />
+                  </TabsContent>
+                  <TabsContent value="precase" className="mt-0">
+                    <PreCaseProceduresTab caseData={caseData} />
                   </TabsContent>
                 </div>
               </div>
@@ -3474,6 +3492,130 @@ function TimelineTab({ caseData }: { caseData: CaseItem }) {
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// تبويب إجراءات ما قبل رفع الدعوى - داخل القضية
+// يعرض جميع الإجراءات السابقة لرفع الدعوى من ملف التجهيز المرتبط
+// ============================================================
+function PreCaseProceduresTab({ caseData }: { caseData: any }) {
+  const [preCaseData, setPreCaseData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadPreCase() {
+      if (!caseData?.preCaseId) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/precases/${caseData.preCaseId}`);
+        const data = await res.json();
+        if (data.success) setPreCaseData(data.preCase);
+      } catch {}
+      setLoading(false);
+    }
+    loadPreCase();
+  }, [caseData?.preCaseId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!caseData?.preCaseId || !preCaseData) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <div className="w-16 h-16 rounded-full bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center mb-3">
+          <FileCheck className="w-8 h-8 text-amber-600" />
+        </div>
+        <h3 className="font-bold text-lg mb-1">لا يوجد ملف تجهيز مرتبط</h3>
+        <p className="text-sm text-muted-foreground max-w-md">
+          هذه القضية لم تُنشأ من ملف تجهيز، أو لم يتم ربط ملف التجهيز بها.
+          يمكنك إنشاء ملف تجهيز جديد من قسم القضايا.
+        </p>
+        <Button
+          variant="outline"
+          className="mt-4"
+          onClick={() => useNavStore.getState().setSection("precases")}
+        >
+          <FileCheck className="w-4 h-4 ml-2" />
+          فتح قسم ملفات التجهيز
+        </Button>
+      </div>
+    );
+  }
+
+  // عرض بيانات ملف التجهيز
+  const sections = [
+    { label: "رقم ملف التجهيز", value: preCaseData.preCaseNumber },
+    { label: "الحالة", value: preCaseData.status },
+    { label: "تاريخ الإنشاء", value: preCaseData.createdAt ? new Date(preCaseData.createdAt).toLocaleDateString("ar-EG") : "—" },
+    { label: "الفئة القانونية", value: preCaseData.legalCategory ?? "—" },
+    { label: "الوقائع", value: preCaseData.facts ?? "—" },
+    { label: "التكييف القانوني", value: preCaseData.legalClassification ?? "—" },
+    { label: "الطلبات", value: preCaseData.requests ?? "—" },
+    { label: "الإنذارات", value: preCaseData.warnings ?? "—" },
+    { label: "التسويات", value: preCaseData.settlements ?? "—" },
+    { label: "المحاضر", value: preCaseData.minutes ?? "—" },
+    { label: "البلاغات", value: preCaseData.reports ?? "—" },
+    { label: "الملاحظات", value: preCaseData.notes ?? "—" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <FileCheck className="w-5 h-5 text-primary" />
+          <h3 className="font-bold">ملف التجهيز المرتبط</h3>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          جميع الإجراءات التي تمت قبل رفع الدعوى، مرتبطة بهذه القضية ومحفوظة بالكامل.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {sections.map((s, i) => (
+          <Card key={i}>
+            <CardContent className="p-3">
+              <div className="text-[10px] font-bold text-muted-foreground mb-1">
+                {s.label}
+              </div>
+              <div className="text-sm text-foreground whitespace-pre-wrap">
+                {s.value || "—"}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {preCaseData.checklistItems && preCaseData.checklistItems.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <h4 className="font-bold text-sm mb-2 flex items-center gap-2">
+              <ListChecks className="w-4 h-4 text-primary" />
+              قائمة المراجعة (Checklist)
+            </h4>
+            <div className="space-y-1">
+              {preCaseData.checklistItems.map((item: any, i: number) => (
+                <div key={i} className="flex items-center gap-2 text-sm">
+                  <div className={cn("w-4 h-4 rounded border flex items-center justify-center", item.checked ? "bg-emerald-500 border-emerald-500" : "border-muted-foreground")}>
+                    {item.checked && <CheckCircle2 className="w-3 h-3 text-white" />}
+                  </div>
+                  <span className={item.checked ? "line-through text-muted-foreground" : ""}>
+                    {item.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
