@@ -1269,15 +1269,38 @@ async function handleTelegramDocument(
 // Polling - يعمل في الخلفية داخل خادم Next.js
 // ============================================================
 
-let pollingActive = false;
-let lastUpdateId = 0;
+// ============================================================
+
+// استخدام globalThis لمنع تكرار pollers بعد hot reload
+// (module-level vars تُعاد تعيينها عند reload، لكن globalThis يستمر)
+const globalAny = globalThis as unknown as {
+  __tgPollingActive?: boolean;
+  __tgLastUpdateId?: number;
+  __tgProcessedUpdates?: Set<number>;
+  __tgPollerStartedAt?: number;
+  __tgPollerGeneration?: number;
+};
+
+let lastUpdateId = globalAny.__tgLastUpdateId ?? 0;
+const processedUpdates = globalAny.__tgProcessedUpdates ?? new Set<number>();
+
+// كل poller لها "جيل" - الجيل الأحدث يلغي القديم
+const myGeneration = (globalAny.__tgPollerGeneration ?? 0) + 1;
+globalAny.__tgPollerGeneration = myGeneration;
 
 async function startTelegramPolling() {
-  if (pollingActive) return;
-  pollingActive = true;
-  console.log("🔄 Starting Telegram polling...");
+  // ابدأ دائماً - الجيل الجديد يلغي القديم تلقائياً
+  // (هذا يمنع تراكم pollers بعد hot reload)
+  globalAny.__tgPollingActive = true;
+  globalAny.__tgPollerStartedAt = Date.now();
+  console.log(`🔄 Starting Telegram polling (generation ${myGeneration})...`);
+
   async function poll() {
-    if (!pollingActive) return;
+    // توقف إذا كان هناك poller أحدث (منع المتراكمة بعد reload)
+    if (globalAny.__tgPollerGeneration !== myGeneration) {
+      console.log(`⏹️ Stopping old poller (generation ${myGeneration}) - newer one active`);
+      return;
+    }
 
     try {
       const token = await getBotToken();
@@ -1294,6 +1317,20 @@ async function startTelegramPolling() {
       if (data.ok && data.result.length > 0) {
         for (const update of data.result) {
           lastUpdateId = update.update_id;
+          globalAny.__tgLastUpdateId = lastUpdateId;
+
+          // منع المعالجة المكررة لنفس التحديث (إذا كان poller آخد يعالجه)
+          if (processedUpdates.has(update.update_id)) {
+            continue;
+          }
+          processedUpdates.add(update.update_id);
+          // احتفظ بآخر 100 تحديث فقط لتفادي تضخم الذاكرة
+          if (processedUpdates.size > 100) {
+            const arr = Array.from(processedUpdates);
+            processedUpdates.clear();
+            arr.slice(-50).forEach(id => processedUpdates.add(id));
+          }
+          globalAny.__tgProcessedUpdates = processedUpdates;
 
           if (!update.message?.chat?.id) continue;
           const chatId = String(update.message.chat.id);

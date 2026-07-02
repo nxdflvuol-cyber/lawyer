@@ -366,56 +366,115 @@ async function executePlan(
 
   // أولاً: إذا كان الإجراء إنشاء/تعديل/حذف، استخرج البيانات من رسالة المستخدم
   if (routerResult.action === "create" || routerResult.action === "update" || routerResult.action === "delete") {
-    // استخدم الـ LLM لاستخراج البيانات المطلوبة
-    const createStep = plan.steps.find(s => s.need.startsWith("create_") || s.need.startsWith("add_") || s.need.startsWith("postpone_"));
-    if (createStep) {
-      const mapping = mapNeedToTool(createStep.need);
-      if (mapping) {
-        // استخرج المعطيات من رسالة المستخدم
-        const extractedArgs = await extractDataFromMessage(userMessage, mapping.tool, sessionId);
-        if (extractedArgs) {
-          // تحقق من العمليات الخطيرة
-          if (routerResult.requires_confirmation) {
-            const pending = memory.getPendingConfirmation(sessionId);
-            if (pending) {
-              // المستخدم يؤكد
-              const confirmWords = ["نعم", "أكّد", "اكد", "yes", "أيوة", "اه"];
-              if (confirmWords.some(w => userMessage.toLowerCase().includes(w.toLowerCase()))) {
-                memory.clearPending(sessionId);
-                const result = await executeTool(pending.tool, pending.args);
-                actions.push({ tool: pending.tool, args: pending.args, result });
-                executed.push({ need: createStep.need, tool: pending.tool, result, success: result.success });
-                return { executed, actions };
-              } else {
-                memory.clearPending(sessionId);
-              }
-            } else {
-              // اطلب تأكيد
-              const itemDesc = extractedArgs.fullName || extractedArgs.internalNumber || extractedArgs.title || "هذا العنصر";
-              memory.setPendingConfirmation(sessionId, {
-                tool: mapping.tool,
-                args: extractedArgs,
-                description: itemDesc,
-              });
-              // ارجع بنتيجة تحتاج تأكيد
-              executed.push({ need: "confirmation", success: false });
-              return { executed, actions };
-            }
-          }
+    // اجمع كل خطوات الإنشاء/التعديل (وليس الأولى فقط)
+    const createSteps = plan.steps.filter(s =>
+      s.need.startsWith("create_") || s.need.startsWith("add_") || s.need.startsWith("postpone_")
+    );
 
-          const result = await executeTool(mapping.tool, extractedArgs);
-          actions.push({ tool: mapping.tool, args: extractedArgs, result });
-          executed.push({ need: createStep.need, tool: mapping.tool, result, data: result.data, success: result.success });
+    if (createSteps.length === 0) {
+      return { executed, actions };
+    }
 
-          // حفظ في الذاكرة
-          if (result.success && result.data) {
-            const data = result.data as { id?: string };
-            if (createStep.need === "create_case" && data.id) memory.setCase(sessionId, data.id, result.data as Record<string, unknown>);
-            if (createStep.need === "create_client" && data.id) memory.setClient(sessionId, data.id, result.data as Record<string, unknown>);
+    // للعمليات الخطيرة (delete/update مالي) - اطلب تأكيد للخطوة الأولى فقط
+    if (routerResult.requires_confirmation) {
+      const pending = memory.getPendingConfirmation(sessionId);
+      if (pending) {
+        const confirmWords = ["نعم", "أكّد", "اكد", "yes", "أيوة", "اه"];
+        if (confirmWords.some(w => userMessage.toLowerCase().includes(w.toLowerCase()))) {
+          memory.clearPending(sessionId);
+          const result = await executeTool(pending.tool, pending.args);
+          actions.push({ tool: pending.tool, args: pending.args, result });
+          executed.push({ need: createSteps[0].need, tool: pending.tool, result, success: result.success });
+          return { executed, actions };
+        } else {
+          memory.clearPending(sessionId);
+        }
+      } else {
+        // اطلب تأكيد للعملية الخطيرة
+        const firstStep = createSteps[0];
+        const firstMapping = mapNeedToTool(firstStep.need);
+        if (firstMapping) {
+          const extractedArgs = await extractDataFromMessage(userMessage, firstMapping.tool, sessionId);
+          if (extractedArgs) {
+            const itemDesc = extractedArgs.fullName || extractedArgs.internalNumber || extractedArgs.title || "هذا العنصر";
+            memory.setPendingConfirmation(sessionId, {
+              tool: firstMapping.tool,
+              args: extractedArgs,
+              description: itemDesc,
+            });
+            executed.push({ need: "confirmation", success: false });
+            return { executed, actions };
           }
+        }
+        return { executed, actions };
+      }
+    }
+
+    // استخرج كل البيانات المنظمة من رسالة المستخدم دفعة واحدة
+    const allData = await extractAllCreateDataFromMessage(
+      userMessage,
+      createSteps.map(s => s.need),
+      sessionId
+    );
+
+    // تتبع المعرفات المنشأة لربط الخطوات اللاحقة
+    let lastClientId = memory.get(sessionId).lastClientId ?? "";
+    let lastCaseId = memory.get(sessionId).lastCaseId ?? "";
+
+    // نفّذ كل خطوات create بالتسلسل
+    for (const step of createSteps) {
+      const mapping = mapNeedToTool(step.need);
+      if (!mapping) continue;
+
+      // خذ البيانات المستخرجة لهذه الخطوة
+      const args: Record<string, unknown> = { ...(allData[step.need] || {}) };
+
+      // حقن المعرفات من الإجراءات السابقة في السلسلة
+      if ((step.need === "create_case" || step.need === "create_appointment" ||
+           step.need === "create_task" || step.need === "create_payment") && !args.clientId && lastClientId) {
+        args.clientId = lastClientId;
+      }
+      if ((step.need === "add_session" || step.need === "create_task") && !args.caseId && lastCaseId) {
+        args.caseId = lastCaseId;
+      }
+
+      // إذا كانت البيانات الأساسية مفقودة، تخطّى الخطوة
+      if (step.need === "create_client" && !args.fullName) continue;
+      if (step.need === "create_case" && (!args.internalNumber || !args.clientId)) {
+        // لا يمكن إنشاء قضية بدون رقم داخلي أو موكل
+        executed.push({ need: step.need, tool: mapping.tool, success: false, result: { success: false, error: "بيانات ناقصة لإنشاء القضية" } });
+        continue;
+      }
+      if (step.need === "add_session" && (!args.caseId || !args.sessionDate)) {
+        executed.push({ need: step.need, tool: mapping.tool, success: false, result: { success: false, error: "بيانات ناقصة لإضافة الجلسة" } });
+        continue;
+      }
+
+      // نفّذ الأداة
+      const result = await executeTool(mapping.tool, args);
+      actions.push({ tool: mapping.tool, args, result });
+      executed.push({
+        need: step.need,
+        tool: mapping.tool,
+        result,
+        data: result.data,
+        success: result.success,
+      });
+
+      // تحديث المعرفات للخطوات اللاحقة (chaining)
+      if (result.success && result.data) {
+        const data = result.data as { id?: string };
+        if (step.need === "create_client" && data.id) {
+          lastClientId = data.id;
+          memory.setClient(sessionId, data.id, result.data as Record<string, unknown>);
+        }
+        if (step.need === "create_case" && data.id) {
+          lastCaseId = data.id;
+          memory.setCase(sessionId, data.id, result.data as Record<string, unknown>);
         }
       }
     }
+
     return { executed, actions };
   }
 
@@ -480,6 +539,83 @@ async function executePlan(
 // ============================================================
 // استخراج البيانات من رسالة المستخدم
 // ============================================================
+
+// استخراج كل البيانات لعدة عمليات create دفعة واحدة
+// مفيد عندما يطلب المستخدم عدة إنشاءات في رسالة واحدة
+async function extractAllCreateDataFromMessage(
+  message: string,
+  createNeeds: string[],
+  sessionId: string
+): Promise<Record<string, Record<string, unknown>>> {
+  const ctx = memory.get(sessionId);
+
+  const needsList = createNeeds.map(n => {
+    const labels: Record<string, string> = {
+      create_client: "موكل جديد",
+      create_case: "قضية جديدة",
+      add_session: "جلسة لقضية",
+      create_appointment: "موعد/تذكير",
+      create_task: "مهمة",
+      create_payment: "دفعة مالية",
+      create_power_of_attorney: "توكيل",
+    };
+    return `- ${n}: ${labels[n] ?? n}`;
+  }).join("\n");
+
+  const extractPrompt = `استخرج كل البيانات من رسالة المستخدم لإنشاء عدة عناصر.
+
+العناصر المطلوب إنشاؤها:
+${needsList}
+
+⚠️ قواعد صارمة:
+- استخرج فقط البيانات المذكورة صراحةً في رسالة المستخدم.
+- لا تخمن أي قيمة. لا تختلق أرقام قضايا أو تواريخ أو أسماء.
+- إذا لم توجد بيانات لعنصر ما، اتركه كـ {} (كائن فارغ).
+
+قواعد الاستخراج المهمة:
+- أرقام القضايا: استخرج الرقم والسنة معاً كما وردت.
+  مثال: "قضية رقمها 11 لسنة 2025" → {"internalNumber": "11 لسنة 2025"}
+  مثال: "قضية رقم 2024/001" → {"internalNumber": "2024/001"}
+  مثال: "12 لسنة 2026 جنح سمالوط شرق" → {"internalNumber": "12 لسنة 2026", "court": "سمالوط شرق"}
+- نوع القضية (caseType) من النص:
+  • "إداري" أو "اداري" → "administrative"
+  • "جنح" أو "جنائية" → "criminal"
+  • "مدني" → "civil"
+  • "تجاري" → "commercial"
+  • "أحوال شخصية" → "personal_status"
+- المحكمة (court): استخرج اسم المحكمة كاملاً. مثال: "اداري غرب سمالوط" → "محكمة غرب سمالوط الإدارية"
+- التواريخ: حوّل لصيغة ISO. "11/07/2026" → "2026-07-11T09:00:00". "اليوم" → تاريخ اليوم ${new Date().toISOString().slice(0,10)}T09:00:00.
+- "إنذار" → create_appointment بعنوان "إنذار" و eventType "deadline".
+- "قضية تانية" أو "الثانية" بدون تفاصيل → {"internalNumber": "TBD"}.
+
+السياق: ${ctx.lastClientId ? `آخر موكل=${ctx.lastClientId}` : "لا يوجد موكل سابق"}
+${ctx.lastCaseId ? `آخر قضية=${ctx.lastCaseId}` : ""}
+
+رسالة المستخدم: "${message}"
+
+أرجع JSON فقط بهذا الشكل (كل مفتاح هو نوع الإنشاء، والقيمة هي بياناته):
+{
+  "create_client": {"fullName": "...", "phone": "..."},
+  "create_case": {"internalNumber": "...", "caseType": "civil", "court": "...", "officialNumber": "..."},
+  "add_session": {"sessionDate": "2026-07-11T09:00:00"},
+  "create_appointment": {"title": "...", "startDate": "2026-07-13T09:00:00", "eventType": "deadline"}
+}`;
+
+  try {
+    const result = await callAiModel(
+      [{ role: "user", content: extractPrompt }],
+      { temperature: 0.1, maxTokens: 1000 }
+    );
+
+    const jsonMatch = result.content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return {};
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    return parsed as Record<string, Record<string, unknown>>;
+  } catch {
+    return {};
+  }
+}
 
 async function extractDataFromMessage(
   message: string,
@@ -587,41 +723,40 @@ async function verifyResults(
   const executedNeeds = executed.map(e => e.need);
   const executedSuccessful = executed.filter(e => e.success);
 
-  // إذا نجح إجراء إنشاء/تعديل (create/update) - نعتبر المهمة مكتملة
-  // ولا نبلّغ عن نواقص من خطوات متخيلة لم يطلبها المستخدم
-  const hasSuccessfulAction = executedSuccessful.some(e =>
-    ["create_client", "create_case", "create_task", "create_appointment",
-     "add_session", "create_payment", "create_expense", "create_power_of_attorney",
-     "update_client", "update_case", "update_task"].includes(e.need)
-  );
-
-  if (hasSuccessfulAction && routerResult.action === "create") {
-    // تم تنفيذ الإجراء المطلوب بنجاح - لا نواقص
-    return {
-      sufficient: true,
-      confidence: 0.9,
-      missing: [],
-      has_data: true,
-      has_legal_context: routerResult.requires_legal_kb,
-    };
+  // للعمليات create: حدد الفاشلة فعلاً (حُاولت ولم تنجح) وليس المتخيلة
+  // الخطوات المتخيلة = المطلوبة لكنها لم تُحاول أصلاً (لأن البيانات ناقصة)
+  // كلاهما نواقص، لكن نفرّق في الوصف
+  const missing: string[] = [];
+  for (const step of requiredSteps) {
+    const executedStep = executed.find(e => e.need === step.need);
+    if (!executedStep) {
+      // لم تُحاول - إما تخطي لنقص بيانات أو لم تصل للتنفيذ
+      missing.push(step.need);
+    } else if (!executedStep.success) {
+      // حُاولت وفشلت
+      missing.push(step.need);
+    }
   }
 
-  // حساب النواقص فقط للخطوات المطلوبة التي لم تُنفذ
-  // لكن فقط إذا لم يكن هناك أي نجاح في الإجراءات
-  const missing = requiredSteps
-    .filter(s => !executedNeeds.includes(s.need))
-    .map(s => s.need);
+  // إذا نجح إجراء create واحد على الأقل وحاولنا كل الخطوات - نعتبرها مكتملة جزئياً
+  const hasSuccessfulAction = executedSuccessful.some(e =>
+    ["create_client", "create_case", "create_task", "create_appointment",
+     "add_session", "create_payment", "create_expense", "create_power_of_attorney"].includes(e.need)
+  );
+
+  // ثقة عالية إذا نجحت كل الخطوات المطلوبة
+  const allRequiredDone = missing.length === 0;
+  const confidence = allRequiredDone
+    ? 0.9
+    : hasSuccessfulAction
+      ? 0.6  // نجح بعضها - ثقة متوسطة
+      : 0.3;
 
   const hasData = executed.some(e => e.success && e.data);
   const hasLegalContext = routerResult.requires_legal_kb;
 
-  // حساب الثقة
-  const totalRequired = requiredSteps.length || 1;
-  const completedRequired = totalRequired - missing.length;
-  const confidence = completedRequired / totalRequired;
-
   return {
-    sufficient: missing.length === 0 && (hasData || !routerResult.requires_database),
+    sufficient: allRequiredDone && (hasData || !routerResult.requires_database),
     confidence,
     missing,
     has_data: hasData,
@@ -665,18 +800,27 @@ async function generateAnswer(
   // بناء البرومبت حسب نوع المهمة
   let systemRole = "أنت محامٍ محترف يعمل في مكتب محاماة.";
 
-  // إذا كان إجراء إنشاء ناجح - رد موجز بدون نواقص
-  const successfulAction = executed.find(e =>
+  // للعمليات create: ركّز على ما تم تنفيذه فعلاً
+  const successfulActions = executed.filter(e =>
     e.success && [
       "create_client", "create_case", "create_task", "create_appointment",
       "add_session", "create_payment", "create_expense", "create_power_of_attorney",
     ].includes(e.need)
   );
-  if (successfulAction && routerResult.action === "create") {
-    systemRole += `\nتم تنفيذ الإجراء المطلوب بنجاح.
-أبلغ المستخدم بالنتيجة بشكل موجز ومباشر.
-لا تذكر أي نواقص. لا تقترح إجراءات إضافية لم يطلبها المستخدم.
-لا تقل "يجب إنشاء قضية" أو "يجب إضافة جلسة" - فقط أكّد ما تم.`;
+  const failedActions = executed.filter(e =>
+    !e.success && [
+      "create_client", "create_case", "create_task", "create_appointment",
+      "add_session", "create_payment", "create_expense", "create_power_of_attorney",
+    ].includes(e.need)
+  );
+
+  if (successfulActions.length > 0 && routerResult.action === "create") {
+    systemRole += `\nتم تنفيذ ${successfulActions.length} عملية بنجاح:
+${successfulActions.map(a => `- ${a.need}: ${a.result?.message ?? "تم"}`).join("\n")}
+
+أبلغ المستخدم بكل ما تم إنجازه. اذكر كل عملية ناجحة بشكل واضح.
+${failedActions.length > 0 ? `فشل ${failedActions.length} عملية:\n${failedActions.map(a => `- ${a.need}: ${a.result?.error ?? "خطأ"}`).join("\n")}\nاذكر الأسباب بإيجاز.` : "كل العمليات المطلوبة نجحت."}
+لا تخمن. لا تقترح إجراءات إضافية لم يطلبها المستخدم.`;
   } else if (routerResult.task_type === "hybrid") {
     systemRole += `\nالمهمة تحتاج تحليلاً هجيناً: ادمج بيانات النظام مع معرفتك القانونية.
 حلل الموقف القانوني بناءً على البيانات المتاحة.
@@ -697,8 +841,8 @@ async function generateAnswer(
     systemRole += `\n\n# سياق المحادثة السابقة:\n${conversationContext}`;
   }
 
-  // فقط اذكر النواقص إذا لم يكن هناك إجراء ناجح
-  if (verification.missing.length > 0 && !successfulAction) {
+  // اذكر النواقص فقط للخطوات المطلوبة التي لم تُحاول (وليس الفاشلة - الفاشلة ذُكرت أعلاه)
+  if (verification.missing.length > 0 && successfulActions.length === 0 && failedActions.length === 0) {
     systemRole += `\n\n⚠️ معلومات ناقصة: ${verification.missing.join(", ")}\nاذكر هذه النواقص في إجابتك.`;
   }
 
@@ -715,10 +859,84 @@ async function generateAnswer(
       [{ role: "user", content: answerPrompt }],
       { temperature: 0.7, maxTokens: 2000 }
     );
-    return result.content;
+    // إذا الـ AI رجع empty، ابنِ رداً من النتائج الفعلية
+    if (result.content && result.content.trim().length > 0) {
+      return result.content;
+    }
+    return buildFallbackAnswer(executed, verification);
   } catch (error) {
-    return `حدث خطأ في توليد الإجابة: ${error instanceof Error ? error.message : "خطأ غير معروف"}`;
+    // في حالة فشل AI، ابنِ رداً من النتائج الفعلية
+    return buildFallbackAnswer(executed, verification);
   }
+}
+
+// بناء رد احتياطي من النتائج الفعلية للإجراءات المنفذة
+function buildFallbackAnswer(
+  executed: ExecutedStep[],
+  verification: VerificationResult
+): string {
+  const ACTION_LABELS: Record<string, string> = {
+    create_client: "إنشاء موكل",
+    create_case: "إنشاء قضية",
+    create_task: "إنشاء مهمة",
+    create_appointment: "إنشاء موعد",
+    add_session: "إضافة جلسة",
+    create_payment: "تسجيل دفعة",
+    create_expense: "تسجيل مصروف",
+    create_power_of_attorney: "إضافة توكيل",
+  };
+
+  const successful = executed.filter(e =>
+    e.success && ACTION_LABELS[e.need]
+  );
+  const failed = executed.filter(e =>
+    !e.success && ACTION_LABELS[e.need]
+  );
+
+  if (successful.length === 0 && failed.length === 0) {
+    if (verification.missing.length > 0) {
+      return `⚠️ تعذّر تنفيذ الطلب.\n\nنواقص: ${verification.missing.join("، ")}.\nيرجى تزويد بيانات أكثر.`;
+    }
+    return "لم أتمكن من تنفيذ الطلب. حاول إعادة الصياغة.";
+  }
+
+  const parts: string[] = [];
+  if (successful.length > 0) {
+    parts.push("✅ تم تنفيذ ما يلي بنجاح:");
+    for (const a of successful) {
+      const label = ACTION_LABELS[a.need];
+      const msg = a.result?.message ?? "";
+      const data = a.data as Record<string, unknown> | undefined;
+      let detail = "";
+      if (a.need === "create_client" && data) {
+        detail = `${data.fullName ?? ""} (${data.id ?? ""})`;
+      } else if (a.need === "create_case" && data) {
+        detail = `${data.internalNumber ?? ""} (${data.id ?? ""})`;
+      } else if (a.need === "create_appointment" && data) {
+        detail = `${data.title ?? ""}`;
+      } else if (a.need === "add_session") {
+        detail = msg;
+      } else {
+        detail = msg;
+      }
+      parts.push(`• ${label}: ${detail}`.trim());
+    }
+  }
+
+  if (failed.length > 0) {
+    parts.push("\n❌ فشل في:");
+    for (const a of failed) {
+      const label = ACTION_LABELS[a.need];
+      const err = a.result?.error ?? "خطأ غير معروف";
+      parts.push(`• ${label}: ${err}`);
+    }
+  }
+
+  if (verification.missing.length > 0 && successful.length === 0) {
+    parts.push(`\n⚠️ نواقص: ${verification.missing.join("، ")}`);
+  }
+
+  return parts.join("\n");
 }
 
 // ============================================================

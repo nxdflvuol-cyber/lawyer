@@ -1,15 +1,27 @@
 import { NextResponse } from "next/server";
 import { startTelegramPolling } from "@/lib/telegram-bot-integrated";
 
-// بدء الـ polling عند أول طلب للنظام
-let started = false;
+// استخدام globalThis لمنع تكرار بدء pollers
+const globalAny = globalThis as unknown as {
+  __tgPollStarted?: boolean;
+  __tgPollerStartedAt?: number;
+};
 
-export async function GET() {
-  if (!started) {
-    started = true;
+function maybeStartPolling() {
+  // ابدأ poller واحدة فقط - الـ generation في telegram-bot-integrated
+  // يضمن أن الـ poller الأحدث هي النشطة
+  const lastStarted = globalAny.__tgPollerStartedAt ?? 0;
+  const now = Date.now();
+  // أعد البدء فقط إذا لم تبدأ منذ 30 ثانية (تفادي الاستدعاءات المتكررة السريعة)
+  if (!globalAny.__tgPollStarted || (now - lastStarted > 30000)) {
+    globalAny.__tgPollStarted = true;
+    globalAny.__tgPollerStartedAt = now;
     startTelegramPolling();
   }
+}
 
+export async function GET() {
+  maybeStartPolling();
   return NextResponse.json({
     success: true,
     message: "Telegram polling is running inside Next.js server",
@@ -18,11 +30,7 @@ export async function GET() {
 }
 
 export async function POST() {
-  if (!started) {
-    started = true;
-    startTelegramPolling();
-  }
-
+  maybeStartPolling();
   return NextResponse.json({
     success: true,
     message: "Telegram polling started",

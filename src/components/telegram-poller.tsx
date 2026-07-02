@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 /**
  * مكوّن خفي يبدأ بوت تليجرام عند تحميل الصفحة
  * يعمل في الخلفية بدون أي واجهة مرئية
+ * نبدأه مرة واحدة فقط - الخادم يحافظ على الـ polling
  */
 export function TelegramPoller() {
   const startedRef = useRef(false);
@@ -13,7 +14,8 @@ export function TelegramPoller() {
     if (startedRef.current) return;
     startedRef.current = true;
 
-    // بدء الـ polling عند تحميل الصفحة
+    // بدء الـ polling مرة واحدة عند تحميل الصفحة
+    // الخادم يستخدم globalThis flag لمنع تكرار pollers
     fetch("/api/telegram-poll", { method: "POST" })
       .then(() => {
         console.log("✅ Telegram polling started");
@@ -22,12 +24,8 @@ export function TelegramPoller() {
         console.error("Failed to start Telegram polling:", error);
       });
 
-    // إعادة المحاولة كل 5 دقائق للتأكد من استمرار العمل
-    const interval = setInterval(() => {
-      fetch("/api/telegram-poll", { method: "POST" }).catch(() => {});
-    }, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
+    // لا حاجة لإعادة المحاولة - الـ polling مستمر في الخادم
+    // طالما الخادم يعمل، البوت يعمل
   }, []);
 
   // مكوّن خفي - لا يعرض شيئاً

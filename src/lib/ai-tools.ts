@@ -5,6 +5,83 @@
 import { db } from "./db";
 
 // ============================================================
+// parser مرن للتواريخ - يدعم صيغ متعددة
+// ============================================================
+
+/**
+ * يحوّل تاريخ من صيغ متعددة إلى كائن Date صالح
+ * يدعم: ISO (2026-07-11), DD/MM/YYYY, MM/DD/YYYY, YYYY/MM/DD,
+ * تواريخ نسبية (اليوم، غداً), تواريخ عربية
+ */
+export function parseFlexibleDate(input: string): Date {
+  if (!input) return new Date();
+  const str = String(input).trim();
+
+  // 1. ISO format already (2026-07-11T09:00:00 or 2026-07-11)
+  const isoDate = new Date(str);
+  if (!isNaN(isoDate.getTime()) && str.match(/^\d{4}-\d{2}-\d{2}/)) {
+    return isoDate;
+  }
+
+  // 2. DD/MM/YYYY or MM/DD/YYYY (نفترض DD/MM/YYYY للعالم العربي)
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (dmyMatch) {
+    let [, d, m, y] = dmyMatch;
+    let day = parseInt(d, 10);
+    let month = parseInt(m, 10);
+    let year = parseInt(y, 10);
+    if (year < 100) year += 2000;
+    // إذا كان الأول > 12، فهو اليوم؛ وإلا نفترض DD/MM
+    if (day > 12 && month <= 12) {
+      // swap not needed - day is correct
+    } else if (month > 12 && day <= 12) {
+      // MM/DD format - swap
+      [day, month] = [month, day];
+    }
+    // افتراضي: DD/MM/YYYY
+    const date = new Date(year, month - 1, day, 9, 0, 0);
+    if (!isNaN(date.getTime())) return date;
+  }
+
+  // 3. YYYY/MM/DD
+  const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (ymdMatch) {
+    const [, y, m, d] = ymdMatch;
+    const date = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), 9, 0, 0);
+    if (!isNaN(date.getTime())) return date;
+  }
+
+  // 4. تواريخ نسبية عربية
+  const lower = str.toLowerCase();
+  if (lower.includes("اليوم") || lower.includes("today")) {
+    return new Date();
+  }
+  if (lower.includes("غدا") || lower.includes("غدًا") || lower.includes("tomorrow")) {
+    const t = new Date();
+    t.setDate(t.getDate() + 1);
+    return t;
+  }
+  if (lower.includes("بعد غد")) {
+    const t = new Date();
+    t.setDate(t.getDate() + 2);
+    return t;
+  }
+  if (lower.includes("أمس") || lower.includes("البارحة") || lower.includes("yesterday")) {
+    const t = new Date();
+    t.setDate(t.getDate() - 1);
+    return t;
+  }
+
+  // 5. محاولة أخيرة
+  const fallback = new Date(str);
+  if (!isNaN(fallback.getTime())) return fallback;
+
+  // 6. إذا فشل كل شيء، استخدم اليوم
+  console.warn(`parseFlexibleDate: failed to parse "${str}", using now`);
+  return new Date();
+}
+
+// ============================================================
 // تعريف أنواع الأدوات
 // ============================================================
 
@@ -163,13 +240,13 @@ async function addSession(args: {
   const session = await db.caseSession.create({
     data: {
       caseId: args.caseId,
-      sessionDate: new Date(args.sessionDate),
+      sessionDate: parseFlexibleDate(args.sessionDate),
       purpose: args.purpose ?? null,
       court: args.court ?? null,
       judgeName: args.judgeName ?? null,
       facts: args.facts ?? null,
       decisions: args.decisions ?? null,
-      nextSessionDate: args.nextSessionDate ? new Date(args.nextSessionDate) : null,
+      nextSessionDate: args.nextSessionDate ? parseFlexibleDate(args.nextSessionDate) : null,
     },
   });
 
@@ -386,7 +463,7 @@ async function createAppointment(args: {
   const apt = await db.appointment.create({
     data: {
       title: args.title,
-      startDate: new Date(args.startDate),
+      startDate: parseFlexibleDate(args.startDate),
       eventType: args.eventType ?? "other",
       location: args.location ?? null,
       caseId: args.caseId ?? null,
