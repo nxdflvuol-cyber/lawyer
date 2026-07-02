@@ -4,17 +4,39 @@ import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Briefcase, Users, FileText, CheckSquare, Calendar } from "lucide-react";
+import {
+  Search, Briefcase, Users, FileText, CheckSquare, Calendar,
+  FileCheck, BookOpen, FileImage,
+} from "lucide-react";
 import { useNavStore } from "@/lib/stores";
-import { formatDate } from "@/lib/constants";
 
 interface SearchResult {
-  type: "case" | "client" | "document" | "task" | "appointment";
+  type: "case" | "client" | "document" | "task" | "appointment" | "precase" | "library";
   id: string;
   title: string;
   subtitle: string;
   meta?: string;
 }
+
+const ICONS: Record<string, typeof Briefcase> = {
+  case: Briefcase,
+  client: Users,
+  document: FileText,
+  task: CheckSquare,
+  appointment: Calendar,
+  precase: FileCheck,
+  library: BookOpen,
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  case: "قضية",
+  client: "موكل",
+  document: "مستند",
+  task: "مهمة",
+  appointment: "موعد",
+  precase: "ملف تجهيز",
+  library: "مرجع قانوني",
+};
 
 export function GlobalSearch({
   open,
@@ -39,36 +61,15 @@ export function GlobalSearch({
     const timeout = setTimeout(async () => {
       setLoading(true);
       try {
-        const [casesRes, clientsRes, tasksRes] = await Promise.all([
-          fetch(`/api/cases?search=${encodeURIComponent(query)}`).then((r) => r.json()),
-          fetch(`/api/clients?search=${encodeURIComponent(query)}`).then((r) => r.json()),
-          fetch(`/api/tasks?search=${encodeURIComponent(query)}`).then((r) => r.json()),
-        ]);
+        // استخدام Smart Search API الجديد
+        const res = await fetch(`/api/smart-search?q=${encodeURIComponent(query)}&limit=30`);
+        const data = await res.json();
 
-        const mapped: SearchResult[] = [
-          ...(casesRes.cases ?? []).slice(0, 5).map((c: Record<string, unknown>) => ({
-            type: "case" as const,
-            id: c.id as string,
-            title: `قضية ${c.internalNumber}`,
-            subtitle: (c.client as { fullName?: string })?.fullName ?? "—",
-            meta: c.opponentName as string,
-          })),
-          ...(clientsRes.clients ?? []).slice(0, 5).map((c: Record<string, unknown>) => ({
-            type: "client" as const,
-            id: c.id as string,
-            title: c.fullName as string,
-            subtitle: c.idNumber as string ?? "—",
-            meta: c.phone as string,
-          })),
-          ...(tasksRes.tasks ?? []).slice(0, 5).map((t: Record<string, unknown>) => ({
-            type: "task" as const,
-            id: t.id as string,
-            title: t.title as string,
-            subtitle: "مهمة",
-            meta: t.dueDate ? formatDate(t.dueDate as string) : "",
-          })),
-        ];
-        setResults(mapped);
+        if (data.success) {
+          setResults(data.results ?? []);
+        } else {
+          setResults([]);
+        }
       } catch {
         setResults([]);
       } finally {
@@ -88,17 +89,17 @@ export function GlobalSearch({
       setSection("clients");
     } else if (result.type === "task") {
       setSection("tasks");
+    } else if (result.type === "precase") {
+      setSection("precases");
+    } else if (result.type === "document") {
+      setSection("documents");
+    } else if (result.type === "library") {
+      setSection("research");
+    } else if (result.type === "appointment") {
+      setSection("appointments");
     }
     onOpenChange(false);
   }
-
-  const ICONS = {
-    case: Briefcase,
-    client: Users,
-    document: FileText,
-    task: CheckSquare,
-    appointment: Calendar,
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -111,7 +112,7 @@ export function GlobalSearch({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="ابحث في القضايا، الموكلين، المهام..."
+            placeholder="ابحث في القضايا، الموكلين، المستندات، المهام، المكتبة القانونية..."
             className="pr-10"
             autoFocus
           />
@@ -123,11 +124,11 @@ export function GlobalSearch({
           )}
           {!loading && results.length > 0 && (
             <div className="space-y-1">
-              {results.map((r) => {
-                const Icon = ICONS[r.type];
+              {results.map((r, i) => {
+                const Icon = ICONS[r.type] ?? FileImage;
                 return (
                   <button
-                    key={`${r.type}-${r.id}`}
+                    key={`${r.type}-${r.id}-${i}`}
                     onClick={() => handleResultClick(r)}
                     className="w-full flex items-center gap-3 p-3 rounded-md hover:bg-accent text-right transition"
                   >
@@ -136,6 +137,9 @@ export function GlobalSearch({
                       <p className="font-medium text-sm truncate">{r.title}</p>
                       <p className="text-xs text-muted-foreground truncate">{r.subtitle}</p>
                     </div>
+                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                      {TYPE_LABELS[r.type] ?? r.type}
+                    </span>
                     {r.meta && (
                       <span className="text-xs text-muted-foreground">{r.meta}</span>
                     )}
